@@ -12,6 +12,26 @@ export class ServiceAStack extends cdk.Stack {
 
     const tableName = "serviceAItems";
 
+    const itemsTable = new Table(this, "serviceAItems", {
+      tableName: tableName,
+      partitionKey: {
+        name: `${tableName}Id`,
+        type: AttributeType.STRING,
+      },
+      encryption: TableEncryption.AWS_MANAGED,
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      stream: StreamViewType.NEW_IMAGE,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const itemsTableRole = new Role(this, "ServiceAItemsDynamoDBRole", {
+      assumedBy: new ServicePrincipal("appsync.amazonaws.com"),
+    });
+
+    itemsTableRole.addManagedPolicy(
+      ManagedPolicy.fromAwsManagedPolicyName("AmazonDynamoDBFullAccess")
+    );
+
     const itemsGraphQLApi = new CfnGraphQLApi(this, "serviceAApi", {
       name: "serviceAApi",
       authenticationType: "API_KEY",
@@ -43,27 +63,7 @@ export class ServiceAStack extends cdk.Stack {
         query: Query
         mutation: Mutation
       }`,
-    });
-
-    const itemsTable = new Table(this, "serviceAItems", {
-      tableName: tableName,
-      partitionKey: {
-        name: `${tableName}Id`,
-        type: AttributeType.STRING,
-      },
-      encryption: TableEncryption.AWS_MANAGED,
-      billingMode: BillingMode.PAY_PER_REQUEST,
-      stream: StreamViewType.NEW_IMAGE,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-
-    const itemsTableRole = new Role(this, "ServiceAItemsDynamoDBRole", {
-      assumedBy: new ServicePrincipal("appsync.amazonaws.com"),
-    });
-
-    itemsTableRole.addManagedPolicy(
-      ManagedPolicy.fromAwsManagedPolicyName("AmazonDynamoDBFullAccess")
-    );
+    });    
 
     const dataSource = new CfnDataSource(this, "ServiceAItemsDataSource", {
       apiId: itemsGraphQLApi.attrApiId,
@@ -91,6 +91,7 @@ export class ServiceAStack extends cdk.Stack {
       responseMappingTemplate: `$util.toJson($ctx.result)`,
     });
     getOneResolver.addDependency(apiSchema);
+    getOneResolver.addDependency(dataSource);
 
     const getAllResolver = new CfnResolver(this, "GetAllQueryResolver", {
       apiId: itemsGraphQLApi.attrApiId,
@@ -106,6 +107,7 @@ export class ServiceAStack extends cdk.Stack {
       responseMappingTemplate: `$util.toJson($ctx.result)`,
     });
     getAllResolver.addDependency(apiSchema);
+    getAllResolver.addDependency(dataSource);
 
     const saveResolver = new CfnResolver(this, "SaveMutationResolver", {
       apiId: itemsGraphQLApi.attrApiId,
@@ -125,6 +127,7 @@ export class ServiceAStack extends cdk.Stack {
       responseMappingTemplate: `$util.toJson($ctx.result)`,
     });
     saveResolver.addDependency(apiSchema);
+    saveResolver.addDependency(dataSource);
 
     const deleteResolver = new CfnResolver(this, "DeleteMutationResolver", {
       apiId: itemsGraphQLApi.attrApiId,
@@ -141,5 +144,6 @@ export class ServiceAStack extends cdk.Stack {
       responseMappingTemplate: `$util.toJson($ctx.result)`,
     });
     deleteResolver.addDependency(apiSchema);
+    deleteResolver.addDependency(dataSource);
   }
 }
