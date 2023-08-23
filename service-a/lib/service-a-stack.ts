@@ -37,6 +37,13 @@ export class ServiceAStack extends cdk.Stack {
       authenticationType: "API_KEY",
     });
 
+    // 👇 create an Output
+    new cdk.CfnOutput(this, 'apiUrl', {
+      value: itemsGraphQLApi.attrGraphQlUrl,
+      description: 'Graphql invocation url',
+      exportName: 'apiUrl',
+    });
+
     new CfnApiKey(this, "serviceAApiKey", {
       apiId: itemsGraphQLApi.attrApiId,
     });
