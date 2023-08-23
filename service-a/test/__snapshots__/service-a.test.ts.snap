@@ -1,0 +1,278 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`All resources created 1`] = `
+{
+  "Parameters": {
+    "BootstrapVersion": {
+      "Default": "/cdk-bootstrap/hnb659fds/version",
+      "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]",
+      "Type": "AWS::SSM::Parameter::Value<String>",
+    },
+  },
+  "Resources": {
+    "DeleteMutationResolver": {
+      "DependsOn": [
+        "serviceAschema",
+      ],
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "serviceAApi",
+            "ApiId",
+          ],
+        },
+        "DataSourceName": "ServiceAItemsDataSource",
+        "FieldName": "delete",
+        "RequestMappingTemplate": "{
+        "version": "2017-02-28",
+        "operation": "DeleteItem",
+        "key": {
+          "serviceAItemsId": $util.dynamodb.toDynamoDBJson($ctx.args.serviceAItemsId)
+        }
+      }",
+        "ResponseMappingTemplate": "$util.toJson($ctx.result)",
+        "TypeName": "Mutation",
+      },
+      "Type": "AWS::AppSync::Resolver",
+    },
+    "GetAllQueryResolver": {
+      "DependsOn": [
+        "serviceAschema",
+      ],
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "serviceAApi",
+            "ApiId",
+          ],
+        },
+        "DataSourceName": "ServiceAItemsDataSource",
+        "FieldName": "all",
+        "RequestMappingTemplate": "{
+        "version": "2017-02-28",
+        "operation": "Scan",
+        "limit": $util.defaultIfNull($ctx.args.limit, 20),
+        "nextToken": $util.toJson($util.defaultIfNullOrEmpty($ctx.args.nextToken, null))
+      }",
+        "ResponseMappingTemplate": "$util.toJson($ctx.result)",
+        "TypeName": "Query",
+      },
+      "Type": "AWS::AppSync::Resolver",
+    },
+    "GetOneQueryResolver": {
+      "DependsOn": [
+        "serviceAschema",
+      ],
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "serviceAApi",
+            "ApiId",
+          ],
+        },
+        "DataSourceName": "ServiceAItemsDataSource",
+        "FieldName": "getOne",
+        "RequestMappingTemplate": "{
+        "version": "2017-02-28",
+        "operation": "GetItem",
+        "key": {
+          "serviceAItemsId": $util.dynamodb.toDynamoDBJson($ctx.args.serviceAItemsId)
+        }
+      }",
+        "ResponseMappingTemplate": "$util.toJson($ctx.result)",
+        "TypeName": "Query",
+      },
+      "Type": "AWS::AppSync::Resolver",
+    },
+    "SaveMutationResolver": {
+      "DependsOn": [
+        "serviceAschema",
+      ],
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "serviceAApi",
+            "ApiId",
+          ],
+        },
+        "DataSourceName": "ServiceAItemsDataSource",
+        "FieldName": "save",
+        "RequestMappingTemplate": "{
+        "version": "2017-02-28",
+        "operation": "PutItem",
+        "key": {
+          "serviceAItemsId": { "S": "$util.autoId()" }
+        },
+        "attributeValues": {
+          "name": $util.dynamodb.toDynamoDBJson($ctx.args.name)
+        }
+      }",
+        "ResponseMappingTemplate": "$util.toJson($ctx.result)",
+        "TypeName": "Mutation",
+      },
+      "Type": "AWS::AppSync::Resolver",
+    },
+    "ServiceAItemsDataSource": {
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "serviceAApi",
+            "ApiId",
+          ],
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region",
+          },
+          "TableName": {
+            "Ref": "serviceAItems03DA76B3",
+          },
+        },
+        "Name": "ServiceAItemsDataSource",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "ServiceAItemsDynamoDBRole196791C2",
+            "Arn",
+          ],
+        },
+        "Type": "AMAZON_DYNAMODB",
+      },
+      "Type": "AWS::AppSync::DataSource",
+    },
+    "ServiceAItemsDynamoDBRole196791C2": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "appsync.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":iam::aws:policy/AmazonDynamoDBFullAccess",
+              ],
+            ],
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Role",
+    },
+    "serviceAApi": {
+      "Properties": {
+        "AuthenticationType": "API_KEY",
+        "Name": "serviceAApi",
+      },
+      "Type": "AWS::AppSync::GraphQLApi",
+    },
+    "serviceAApiKey": {
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "serviceAApi",
+            "ApiId",
+          ],
+        },
+      },
+      "Type": "AWS::AppSync::ApiKey",
+    },
+    "serviceAItems03DA76B3": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "serviceAItemsId",
+            "AttributeType": "S",
+          },
+        ],
+        "BillingMode": "PAY_PER_REQUEST",
+        "KeySchema": [
+          {
+            "AttributeName": "serviceAItemsId",
+            "KeyType": "HASH",
+          },
+        ],
+        "SSESpecification": {
+          "SSEEnabled": true,
+        },
+        "StreamSpecification": {
+          "StreamViewType": "NEW_IMAGE",
+        },
+        "TableName": "serviceAItems",
+      },
+      "Type": "AWS::DynamoDB::Table",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "serviceAschema": {
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "serviceAApi",
+            "ApiId",
+          ],
+        },
+        "Definition": "type serviceAItems {
+        serviceAItemsId: ID!
+        name: String
+      }
+      type PaginatedserviceAItems {
+        items: [serviceAItems!]!
+        nextToken: String
+      }
+      type Query {
+        all(limit: Int, nextToken: String): PaginatedserviceAItems!
+        getOne(serviceAItemsId: ID!): serviceAItems
+      }
+      type Mutation {
+        save(name: String!): serviceAItems
+        delete(serviceAItemsId: ID!): serviceAItems
+      }
+      type Schema {
+        query: Query
+        mutation: Mutation
+      }",
+      },
+      "Type": "AWS::AppSync::GraphQLSchema",
+    },
+  },
+  "Rules": {
+    "CheckBootstrapVersion": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Not": [
+              {
+                "Fn::Contains": [
+                  [
+                    "1",
+                    "2",
+                    "3",
+                    "4",
+                    "5",
+                  ],
+                  {
+                    "Ref": "BootstrapVersion",
+                  },
+                ],
+              },
+            ],
+          },
+          "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI.",
+        },
+      ],
+    },
+  },
+}
+`;
