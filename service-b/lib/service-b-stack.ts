@@ -49,8 +49,6 @@ export class ServiceBStack extends cdk.Stack {
       },
       runtime: Runtime.NODEJS_18_X,
     }
-
-    console.log(__dirname);
     
     // Create a Lambda function for each of the CRUD operations
     const getOneLambda = new NodejsFunction(this, 'getOneItemFunction', {

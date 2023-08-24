@@ -24,13 +24,14 @@ test("All resources created", () => {
       SSEEnabled: true
     }
   });
-  template.resourceCountIs('AWS::DynamoDB::Table', 1);
 
-  
+  template.resourceCountIs('AWS::DynamoDB::Table', 1);
   
   template.hasResourceProperties('AWS::ApiGateway::RestApi', {
     Name: 'serviceBApi'
   });
   
   template.resourceCountIs('AWS::ApiGateway::RestApi', 1);
+
+  template.resourceCountIs('AWS::Lambda::Function', 5);
 });
