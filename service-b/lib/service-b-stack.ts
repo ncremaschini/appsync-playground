@@ -38,11 +38,9 @@ export class ServiceBStack extends cdk.Stack {
 
     const nodeJsFunctionProps: NodejsFunctionProps = {
       bundling: {
-        externalModules: [
-          'aws-sdk', // Use the 'aws-sdk' available in the Lambda runtime
-        ],
+        externalModules: [],
       },
-      depsLockFilePath: join(__dirname, 'lambdas', 'package-lock.json'),
+      depsLockFilePath: join(__dirname, 'package-lock.json'),
       environment: {
         PRIMARY_KEY: 'itemId',
         TABLE_NAME: itemsTable.tableName,
@@ -52,23 +50,23 @@ export class ServiceBStack extends cdk.Stack {
     
     // Create a Lambda function for each of the CRUD operations
     const getOneLambda = new NodejsFunction(this, 'getOneItemFunction', {
-      entry: join(__dirname, 'lambdas', 'get-one.ts'),
+      entry: join(__dirname, 'get-one.ts'),
       ...nodeJsFunctionProps,
     });
     const getAllLambda = new NodejsFunction(this, 'getAllItemsFunction', {
-      entry: join(__dirname, 'lambdas', 'get-all.ts'),
+      entry: join(__dirname, 'get-all.ts'),
       ...nodeJsFunctionProps,
     });
     const createOneLambda = new NodejsFunction(this, 'createItemFunction', {
-      entry: join(__dirname, 'lambdas', 'create.ts'),
+      entry: join(__dirname, 'create.ts'),
       ...nodeJsFunctionProps,
     });
     const updateOneLambda = new NodejsFunction(this, 'updateItemFunction', {
-      entry: join(__dirname, 'lambdas', 'update-one.ts'),
+      entry: join(__dirname, 'update-one.ts'),
       ...nodeJsFunctionProps,
     });
     const deleteOneLambda = new NodejsFunction(this, 'deleteItemFunction', {
-      entry: join(__dirname, 'lambdas', 'delete-one.ts'),
+      entry: join(__dirname, 'delete-one.ts'),
       ...nodeJsFunctionProps,
     });
 
