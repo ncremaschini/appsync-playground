@@ -5,7 +5,7 @@
     "service-b": "bin/service-b.js"
   },
   "scripts": {
-    "postinstall": "(cd lambdas && npm install);",
+    "postinstall": "(cd lib/lambdas && npm install);",
     "build": "tsc",
     "watch": "tsc -w",
     "test": "jest",

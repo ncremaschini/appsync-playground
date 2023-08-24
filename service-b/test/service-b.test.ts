@@ -1,17 +1,36 @@
-// import * as cdk from 'aws-cdk-lib';
-// import { Template } from 'aws-cdk-lib/assertions';
-// import * as ServiceB from '../lib/service-b-stack';
+import * as ServiceA from '../lib/service-b-stack';
+import * as cdk from 'aws-cdk-lib';
 
-// example test. To run these tests, uncomment this file along with the
-// example resource in lib/service-b-stack.ts
-test('SQS Queue Created', () => {
-//   const app = new cdk.App();
-//     // WHEN
-//   const stack = new ServiceB.ServiceBStack(app, 'MyTestStack');
-//     // THEN
-//   const template = Template.fromStack(stack);
+import { AttributeType } from 'aws-cdk-lib/aws-dynamodb';
+import { Template } from 'aws-cdk-lib/assertions';
 
-//   template.hasResourceProperties('AWS::SQS::Queue', {
-//     VisibilityTimeout: 300
-//   });
+test("All resources created", () => {
+  const app = new cdk.App();
+  // WHEN
+  const stack = new ServiceA.ServiceBStack(app, "TestStack");
+  // THEN
+  const template = Template.fromStack(stack);
+
+  expect(template).toMatchSnapshot();
+
+  template.hasResourceProperties('AWS::DynamoDB::Table', {
+    TableName: 'serviceBItems',
+    KeySchema: [
+        {
+            "AttributeName": "serviceBItemsId",
+            "KeyType": "HASH",
+        }],
+    SSESpecification: {
+      SSEEnabled: true
+    }
+  });
+  template.resourceCountIs('AWS::DynamoDB::Table', 1);
+
+  
+  
+  template.hasResourceProperties('AWS::ApiGateway::RestApi', {
+    Name: 'serviceBApi'
+  });
+  
+  template.resourceCountIs('AWS::ApiGateway::RestApi', 1);
 });
