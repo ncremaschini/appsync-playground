@@ -114,12 +114,6 @@ export class ServiceBStack extends cdk.Stack {
 
     api.addUsagePlan(`devUsagePlan`, usagePlanProps).addApiKey(apiKey);
 
-    new cdk.CfnOutput(this, 'apiUrl', {
-      value: api.url,
-      description: 'rest api invocation url',
-      exportName: 'apiUrl',
-    });
-
     const items = api.root.addResource('items');
     items.addMethod('GET', getAllIntegration);
     items.addMethod('POST', createOneIntegration);
