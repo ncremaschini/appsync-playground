@@ -43,14 +43,14 @@ export class ServiceAStack extends cdk.Stack {
       exportName: 'apiUrl',
     });
 
-    const apiKey = new CfnApiKey(this, "serviceAApiKey", {
+    const apiKey = new CfnApiKey(this, "ApiKey", {
       apiId: itemsGraphQLApi.attrApiId,
     });
 
-    new cdk.CfnOutput(this, 'apiKey', {
+    new cdk.CfnOutput(this, 'serviceAApiKeyOut', {
       value: apiKey.attrApiKey,
       description: 'api key',
-      exportName: 'apiKey',
+      exportName: 'serviceAApiKey',
     });
 
     const apiSchema = new CfnGraphQLSchema(this, "serviceAschema", {

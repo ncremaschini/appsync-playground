@@ -100,10 +100,10 @@ export class ServiceBStack extends cdk.Stack {
       enabled: true,
     })
 
-    new cdk.CfnOutput(this, 'apiKey', {
+    new cdk.CfnOutput(this, 'serviceBApiKeyOut', {
       value: apiKey.keyId,
       description: 'api key',
-      exportName: 'apiKey',
+      exportName: 'serviceBApiKey',
     });
 
     const usagePlanProps: aws_apigateway.UsagePlanProps = {
