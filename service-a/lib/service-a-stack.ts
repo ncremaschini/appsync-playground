@@ -138,7 +138,7 @@ export class ServiceAStack extends cdk.Stack {
 
   private createGraphQlApi() {
 
-    const cloudWatchLogsRole = new Role(this, "ApiCloudWatchRole", {
+    const cloudWatchLogsRole = new Role(this, "ServiceAApiCloudWatchRole", {
       assumedBy: new ServicePrincipal('appsync.amazonaws.com'),
       managedPolicies: [ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSAppSyncPushToCloudWatchLogs')]
     })
@@ -152,7 +152,7 @@ export class ServiceAStack extends cdk.Stack {
       }
     });
 
-    const apiKey = new CfnApiKey(this, "ApiKey", {
+    const apiKey = new CfnApiKey(this, "ServiceAApiKey", {
       apiId: itemsGraphQLApi.attrApiId,
     });
     return { itemsGraphQLApi, apiKey };
