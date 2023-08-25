@@ -1,5 +1,7 @@
 import cdk = require('aws-cdk-lib');
 
+import * as logs from 'aws-cdk-lib/aws-logs';
+
 import { AttributeType, BillingMode, StreamViewType, Table, TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
 import { IResource, LambdaIntegration, MockIntegration, PassthroughBehavior, Period, RestApi } from 'aws-cdk-lib/aws-apigateway';
 import { ManagedPolicy, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
@@ -19,7 +21,7 @@ export class ServiceBStack extends cdk.Stack {
     const itemsTable = new Table(this, "serviceBItems", {
       tableName: tableName,
       partitionKey: {
-        name: `${tableName}Id`,
+        name: 'itemId',
         type: AttributeType.STRING,
       },
       encryption: TableEncryption.AWS_MANAGED,
@@ -46,6 +48,7 @@ export class ServiceBStack extends cdk.Stack {
         TABLE_NAME: itemsTable.tableName,
       },
       runtime: Runtime.NODEJS_18_X,
+      logRetention: logs.RetentionDays.ONE_DAY
     }
     
     // Create a Lambda function for each of the CRUD operations

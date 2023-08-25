@@ -12,6 +12,7 @@ export const handler = async (event: any = {}): Promise<any> => {
   if (!event.body) {
     return { statusCode: 400, body: 'invalid request, you are missing the parameter body' };
   }
+  
   const item = typeof event.body == 'object' ? event.body : JSON.parse(event.body);
   item[PRIMARY_KEY] = uuidv4();
   const params = {
@@ -23,6 +24,7 @@ export const handler = async (event: any = {}): Promise<any> => {
     await db.put(params).promise();
     return { statusCode: 201, body: '' };
   } catch (dbError) {
+    console.error(JSON.stringify(dbError));
     return { statusCode: 500, body: JSON.stringify(dbError) };
   }
 };
