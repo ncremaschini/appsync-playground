@@ -21,7 +21,7 @@ export class ServiceBStack extends cdk.Stack {
     const itemsTable = new Table(this, "serviceBItems", {
       tableName: tableName,
       partitionKey: {
-        name: 'itemId',
+        name: `${tableName}Id`,
         type: AttributeType.STRING,
       },
       encryption: TableEncryption.AWS_MANAGED,
@@ -44,7 +44,7 @@ export class ServiceBStack extends cdk.Stack {
       },
       depsLockFilePath: join(__dirname, 'lambdas', 'package-lock.json'),
       environment: {
-        PRIMARY_KEY: 'itemId',
+        PRIMARY_KEY: `${tableName}Id`,
         TABLE_NAME: itemsTable.tableName,
       },
       runtime: Runtime.NODEJS_18_X,

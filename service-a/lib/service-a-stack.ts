@@ -32,11 +32,20 @@ export class ServiceAStack extends cdk.Stack {
       ManagedPolicy.fromAwsManagedPolicyName("AmazonDynamoDBFullAccess")
     );
 
+    const cloudWatchLogsRole = new Role(this, "ApiCloudWatchRole", {
+      assumedBy: new ServicePrincipal('appsync.amazonaws.com'),
+      managedPolicies: [ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSAppSyncPushToCloudWatchLogs')]
+    })
+
     const itemsGraphQLApi = new CfnGraphQLApi(this, "serviceAApi", {
       name: "serviceAApi",
       authenticationType: "API_KEY",
+      logConfig: {
+        fieldLogLevel: 'ERROR',
+        cloudWatchLogsRoleArn: cloudWatchLogsRole.roleArn,
+      }
     });
-
+    
     new cdk.CfnOutput(this, 'apiUrl', {
       value: itemsGraphQLApi.attrGraphQlUrl,
       description: 'Graphql invocation url',
