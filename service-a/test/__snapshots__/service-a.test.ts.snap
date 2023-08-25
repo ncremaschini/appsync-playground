@@ -2,6 +2,32 @@
 
 exports[`All resources created 1`] = `
 {
+  "Outputs": {
+    "apiUrl": {
+      "Description": "Graphql invocation url",
+      "Export": {
+        "Name": "apiUrl",
+      },
+      "Value": {
+        "Fn::GetAtt": [
+          "serviceAApi",
+          "GraphQLUrl",
+        ],
+      },
+    },
+    "serviceAApiKeyOut": {
+      "Description": "api key",
+      "Export": {
+        "Name": "serviceAApiKey",
+      },
+      "Value": {
+        "Fn::GetAtt": [
+          "ApiKey",
+          "ApiKey",
+        ],
+      },
+    },
+  },
   "Parameters": {
     "BootstrapVersion": {
       "Default": "/cdk-bootstrap/hnb659fds/version",
@@ -10,8 +36,51 @@ exports[`All resources created 1`] = `
     },
   },
   "Resources": {
+    "ApiCloudWatchRole51F74042": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "appsync.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":iam::aws:policy/service-role/AWSAppSyncPushToCloudWatchLogs",
+              ],
+            ],
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Role",
+    },
+    "ApiKey": {
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "serviceAApi",
+            "ApiId",
+          ],
+        },
+      },
+      "Type": "AWS::AppSync::ApiKey",
+    },
     "DeleteMutationResolver": {
       "DependsOn": [
+        "ServiceAItemsDataSource",
         "serviceAschema",
       ],
       "Properties": {
@@ -37,6 +106,7 @@ exports[`All resources created 1`] = `
     },
     "GetAllQueryResolver": {
       "DependsOn": [
+        "ServiceAItemsDataSource",
         "serviceAschema",
       ],
       "Properties": {
@@ -61,6 +131,7 @@ exports[`All resources created 1`] = `
     },
     "GetOneQueryResolver": {
       "DependsOn": [
+        "ServiceAItemsDataSource",
         "serviceAschema",
       ],
       "Properties": {
@@ -86,6 +157,7 @@ exports[`All resources created 1`] = `
     },
     "SaveMutationResolver": {
       "DependsOn": [
+        "ServiceAItemsDataSource",
         "serviceAschema",
       ],
       "Properties": {
@@ -173,20 +245,18 @@ exports[`All resources created 1`] = `
     "serviceAApi": {
       "Properties": {
         "AuthenticationType": "API_KEY",
+        "LogConfig": {
+          "CloudWatchLogsRoleArn": {
+            "Fn::GetAtt": [
+              "ApiCloudWatchRole51F74042",
+              "Arn",
+            ],
+          },
+          "FieldLogLevel": "ERROR",
+        },
         "Name": "serviceAApi",
       },
       "Type": "AWS::AppSync::GraphQLApi",
-    },
-    "serviceAApiKey": {
-      "Properties": {
-        "ApiId": {
-          "Fn::GetAtt": [
-            "serviceAApi",
-            "ApiId",
-          ],
-        },
-      },
-      "Type": "AWS::AppSync::ApiKey",
     },
     "serviceAItems03DA76B3": {
       "DeletionPolicy": "Delete",

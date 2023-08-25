@@ -12,91 +12,20 @@ export class ServiceAStack extends cdk.Stack {
 
     const tableName = "serviceAItems";
 
-    const itemsTable = new Table(this, "serviceAItems", {
-      tableName: tableName,
-      partitionKey: {
-        name: `${tableName}Id`,
-        type: AttributeType.STRING,
-      },
-      encryption: TableEncryption.AWS_MANAGED,
-      billingMode: BillingMode.PAY_PER_REQUEST,
-      stream: StreamViewType.NEW_IMAGE,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
+    const { itemsTable, itemsTableRole } = this.createTable(tableName);
 
-    const itemsTableRole = new Role(this, "ServiceAItemsDynamoDBRole", {
-      assumedBy: new ServicePrincipal("appsync.amazonaws.com"),
-    });
+    const { itemsGraphQLApi, apiKey } = this.createGraphQlApi();
 
-    itemsTableRole.addManagedPolicy(
-      ManagedPolicy.fromAwsManagedPolicyName("AmazonDynamoDBFullAccess")
-    );
+    const apiSchema = this.createGraphQlSchema(itemsGraphQLApi, tableName);    
 
-    const cloudWatchLogsRole = new Role(this, "ApiCloudWatchRole", {
-      assumedBy: new ServicePrincipal('appsync.amazonaws.com'),
-      managedPolicies: [ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSAppSyncPushToCloudWatchLogs')]
-    })
+    const dataSource = this.createGraphQlDatasource(itemsGraphQLApi, itemsTable, itemsTableRole);
 
-    const itemsGraphQLApi = new CfnGraphQLApi(this, "serviceAApi", {
-      name: "serviceAApi",
-      authenticationType: "API_KEY",
-      logConfig: {
-        fieldLogLevel: 'ERROR',
-        cloudWatchLogsRoleArn: cloudWatchLogsRole.roleArn,
-      }
-    });
-    
-    new cdk.CfnOutput(this, 'apiUrl', {
-      value: itemsGraphQLApi.attrGraphQlUrl,
-      description: 'Graphql invocation url',
-      exportName: 'apiUrl',
-    });
+    this.createGraphQlResolvers(itemsGraphQLApi, dataSource, tableName, apiSchema);
 
-    const apiKey = new CfnApiKey(this, "ApiKey", {
-      apiId: itemsGraphQLApi.attrApiId,
-    });
+    this.createStackOutputs(itemsGraphQLApi, apiKey);
+  }
 
-    new cdk.CfnOutput(this, 'serviceAApiKeyOut', {
-      value: apiKey.attrApiKey,
-      description: 'api key',
-      exportName: 'serviceAApiKey',
-    });
-
-    const apiSchema = new CfnGraphQLSchema(this, "serviceAschema", {
-      apiId: itemsGraphQLApi.attrApiId,
-      definition: `type ${tableName} {
-        ${tableName}Id: ID!
-        name: String
-      }
-      type Paginated${tableName} {
-        items: [${tableName}!]!
-        nextToken: String
-      }
-      type Query {
-        all(limit: Int, nextToken: String): Paginated${tableName}!
-        getOne(${tableName}Id: ID!): ${tableName}
-      }
-      type Mutation {
-        save(name: String!): ${tableName}
-        delete(${tableName}Id: ID!): ${tableName}
-      }
-      type Schema {
-        query: Query
-        mutation: Mutation
-      }`,
-    });    
-
-    const dataSource = new CfnDataSource(this, "ServiceAItemsDataSource", {
-      apiId: itemsGraphQLApi.attrApiId,
-      name: "ServiceAItemsDataSource",
-      type: "AMAZON_DYNAMODB",
-      dynamoDbConfig: {
-        tableName: itemsTable.tableName,
-        awsRegion: this.region,
-      },
-      serviceRoleArn: itemsTableRole.roleArn,
-    });
-
+  private createGraphQlResolvers(itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, dataSource: cdk.aws_appsync.CfnDataSource, tableName: string, apiSchema: cdk.aws_appsync.CfnGraphQLSchema) {
     const getOneResolver = new CfnResolver(this, "GetOneQueryResolver", {
       apiId: itemsGraphQLApi.attrApiId,
       typeName: "Query",
@@ -166,5 +95,103 @@ export class ServiceAStack extends cdk.Stack {
     });
     deleteResolver.addDependency(apiSchema);
     deleteResolver.addDependency(dataSource);
+  }
+
+  private createGraphQlDatasource(itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, itemsTable: cdk.aws_dynamodb.Table, itemsTableRole: cdk.aws_iam.Role) {
+    return new CfnDataSource(this, "ServiceAItemsDataSource", {
+      apiId: itemsGraphQLApi.attrApiId,
+      name: "ServiceAItemsDataSource",
+      type: "AMAZON_DYNAMODB",
+      dynamoDbConfig: {
+        tableName: itemsTable.tableName,
+        awsRegion: this.region,
+      },
+      serviceRoleArn: itemsTableRole.roleArn,
+    });
+  }
+
+  private createGraphQlSchema(itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, tableName: string) {
+    return new CfnGraphQLSchema(this, "serviceAschema", {
+      apiId: itemsGraphQLApi.attrApiId,
+      definition: `type ${tableName} {
+        ${tableName}Id: ID!
+        name: String
+      }
+      type Paginated${tableName} {
+        items: [${tableName}!]!
+        nextToken: String
+      }
+      type Query {
+        all(limit: Int, nextToken: String): Paginated${tableName}!
+        getOne(${tableName}Id: ID!): ${tableName}
+      }
+      type Mutation {
+        save(name: String!): ${tableName}
+        delete(${tableName}Id: ID!): ${tableName}
+      }
+      type Schema {
+        query: Query
+        mutation: Mutation
+      }`,
+    });
+  }
+
+  private createGraphQlApi() {
+
+    const cloudWatchLogsRole = new Role(this, "ApiCloudWatchRole", {
+      assumedBy: new ServicePrincipal('appsync.amazonaws.com'),
+      managedPolicies: [ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSAppSyncPushToCloudWatchLogs')]
+    })
+
+    const itemsGraphQLApi = new CfnGraphQLApi(this, "serviceAApi", {
+      name: "serviceAApi",
+      authenticationType: "API_KEY",
+      logConfig: {
+        fieldLogLevel: 'ERROR',
+        cloudWatchLogsRoleArn: cloudWatchLogsRole.roleArn,
+      }
+    });
+
+    const apiKey = new CfnApiKey(this, "ApiKey", {
+      apiId: itemsGraphQLApi.attrApiId,
+    });
+    return { itemsGraphQLApi, apiKey };
+  }
+
+  private createStackOutputs(itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, apiKey: cdk.aws_appsync.CfnApiKey) {
+    new cdk.CfnOutput(this, 'apiUrl', {
+      value: itemsGraphQLApi.attrGraphQlUrl,
+      description: 'Graphql invocation url',
+      exportName: 'apiUrl',
+    });
+
+    new cdk.CfnOutput(this, 'serviceAApiKeyOut', {
+      value: apiKey.attrApiKey,
+      description: 'api key',
+      exportName: 'serviceAApiKey',
+    });
+  }
+
+  private createTable(tableName: string) {
+    const itemsTable = new Table(this, "serviceAItems", {
+      tableName: tableName,
+      partitionKey: {
+        name: `${tableName}Id`,
+        type: AttributeType.STRING,
+      },
+      encryption: TableEncryption.AWS_MANAGED,
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      stream: StreamViewType.NEW_IMAGE,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const itemsTableRole = new Role(this, "ServiceAItemsDynamoDBRole", {
+      assumedBy: new ServicePrincipal("appsync.amazonaws.com"),
+    });
+
+    itemsTableRole.addManagedPolicy(
+      ManagedPolicy.fromAwsManagedPolicyName("AmazonDynamoDBFullAccess")
+    );
+    return { itemsTable, itemsTableRole };
   }
 }

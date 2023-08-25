@@ -3,6 +3,7 @@ import cdk = require('aws-cdk-lib');
 import * as logs from 'aws-cdk-lib/aws-logs';
 
 import { AttributeType, BillingMode, StreamViewType, Table, TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
+import { CfnApiKey, CfnDataSource, CfnGraphQLApi, CfnGraphQLSchema, CfnResolver } from 'aws-cdk-lib/aws-appsync';
 import { IResource, LambdaIntegration, MockIntegration, PassthroughBehavior, Period, RestApi } from 'aws-cdk-lib/aws-apigateway';
 import { ManagedPolicy, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import { NodejsFunction, NodejsFunctionProps } from 'aws-cdk-lib/aws-lambda-nodejs';
@@ -18,42 +19,65 @@ export class ServiceBStack extends cdk.Stack {
 
     const tableName = "serviceBItems";
 
-    const itemsTable = new Table(this, "serviceBItems", {
-      tableName: tableName,
-      partitionKey: {
-        name: `${tableName}Id`,
-        type: AttributeType.STRING,
-      },
-      encryption: TableEncryption.AWS_MANAGED,
-      billingMode: BillingMode.PAY_PER_REQUEST,
-      stream: StreamViewType.NEW_IMAGE,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
+    const { itemsTable } = this.createTable(tableName);
 
-    const itemsTableRole = new Role(this, "serviceBItemsDynamoDBRole", {
-      assumedBy: new ServicePrincipal("appsync.amazonaws.com"),
-    });
-
-    itemsTableRole.addManagedPolicy(
-      ManagedPolicy.fromAwsManagedPolicyName("AmazonDynamoDBFullAccess")
-    );
-
-    const nodeJsFunctionProps: NodejsFunctionProps = {
-      bundling: {
-        externalModules: [],
-      },
-      depsLockFilePath: join(__dirname, 'lambdas', 'package-lock.json'),
-      environment: {
-        PRIMARY_KEY: `${tableName}Id`,
-        TABLE_NAME: itemsTable.tableName,
-      },
-      runtime: Runtime.NODEJS_18_X,
-      logRetention: logs.RetentionDays.ONE_DAY
-    }
+    const nodeJsFunctionProps: NodejsFunctionProps = this.defineFunctionsProps(tableName, itemsTable);
     
-    // Create a Lambda function for each of the CRUD operations
+    const { getAllIntegration, createOneIntegration, getOneIntegration, updateOneIntegration, deleteOneIntegration } = this.createFunctions(nodeJsFunctionProps, itemsTable);
+
+    const restApiKey = this.createRestApi(getAllIntegration, createOneIntegration, getOneIntegration, updateOneIntegration, deleteOneIntegration);
+
+    this.createStackOutputs(restApiKey);
+
+  }
+
+  private createStackOutputs(restApiKey: cdk.aws_apigateway.ApiKey) {
+    new cdk.CfnOutput(this, 'serviceBRestApiKeyOut', {
+      value: restApiKey.keyId,
+      description: 'api key',
+      exportName: 'serviceBRestApiKey',
+    });
+  }
+
+
+
+  private createRestApi(getAllIntegration: cdk.aws_apigateway.LambdaIntegration, createOneIntegration: cdk.aws_apigateway.LambdaIntegration, getOneIntegration: cdk.aws_apigateway.LambdaIntegration, updateOneIntegration: cdk.aws_apigateway.LambdaIntegration, deleteOneIntegration: cdk.aws_apigateway.LambdaIntegration) {
+    const api = new RestApi(this, 'serviceBApi', {
+      restApiName: 'serviceBApi'
+    });
+
+    const apiKeyName = "rest-dev-key";
+
+    const restApiKey = new aws_apigateway.ApiKey(this, `RestAPIkey`, {
+      apiKeyName,
+      description: `Rest APIKey of service B`,
+      enabled: true,
+    });
+
+    const usagePlanProps: aws_apigateway.UsagePlanProps = {
+      name: "devUsagePlan",
+      apiStages: [{ api: api, stage: api.deploymentStage }],
+      throttle: { burstLimit: 500, rateLimit: 1000 }, quota: { limit: 10000000, period: Period.MONTH }
+    };
+
+    api.addUsagePlan(`devUsagePlan`, usagePlanProps).addApiKey(restApiKey);
+
+    const items = api.root.addResource('items');
+    items.addMethod('GET', getAllIntegration);
+    items.addMethod('POST', createOneIntegration);
+    addCorsOptions(items);
+
+    const singleItem = items.addResource('{id}');
+    singleItem.addMethod('GET', getOneIntegration);
+    singleItem.addMethod('PATCH', updateOneIntegration);
+    singleItem.addMethod('DELETE', deleteOneIntegration);
+    addCorsOptions(singleItem);
+    return restApiKey;
+  }
+
+  private createFunctions(nodeJsFunctionProps: cdk.aws_lambda_nodejs.NodejsFunctionProps, itemsTable: cdk.aws_dynamodb.Table) {
     const getOneLambda = new NodejsFunction(this, 'getOneItemFunction', {
-      entry: join(__dirname,'lambdas', 'get-one.ts'),
+      entry: join(__dirname, 'lambdas', 'get-one.ts'),
       ...nodeJsFunctionProps,
     });
     const getAllLambda = new NodejsFunction(this, 'getAllItemsFunction', {
@@ -61,7 +85,7 @@ export class ServiceBStack extends cdk.Stack {
       ...nodeJsFunctionProps,
     });
     const createOneLambda = new NodejsFunction(this, 'createItemFunction', {
-      entry: join(__dirname, 'lambdas','create.ts'),
+      entry: join(__dirname, 'lambdas', 'create.ts'),
       ...nodeJsFunctionProps,
     });
     const updateOneLambda = new NodejsFunction(this, 'updateItemFunction', {
@@ -86,45 +110,45 @@ export class ServiceBStack extends cdk.Stack {
     const getOneIntegration = new LambdaIntegration(getOneLambda);
     const updateOneIntegration = new LambdaIntegration(updateOneLambda);
     const deleteOneIntegration = new LambdaIntegration(deleteOneLambda);
+    return { getAllIntegration, createOneIntegration, getOneIntegration, updateOneIntegration, deleteOneIntegration };
+  }
 
+  private defineFunctionsProps(tableName: string, itemsTable: cdk.aws_dynamodb.Table): cdk.aws_lambda_nodejs.NodejsFunctionProps {
+    return {
+      bundling: {
+        externalModules: [],
+      },
+      depsLockFilePath: join(__dirname, 'lambdas', 'package-lock.json'),
+      environment: {
+        PRIMARY_KEY: `${tableName}Id`,
+        TABLE_NAME: itemsTable.tableName,
+      },
+      runtime: Runtime.NODEJS_18_X,
+      logRetention: logs.RetentionDays.ONE_DAY
+    };
+  }
 
-    // Create an API Gateway resource for each of the CRUD operations
-    const api = new RestApi(this, 'serviceBApi', {
-      restApiName: 'serviceBApi'
+  private createTable(tableName: string) {
+    const itemsTable = new Table(this, "serviceBItems", {
+      tableName: tableName,
+      partitionKey: {
+        name: `${tableName}Id`,
+        type: AttributeType.STRING,
+      },
+      encryption: TableEncryption.AWS_MANAGED,
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      stream: StreamViewType.NEW_IMAGE,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    const apiKeyName = "dev-key"
-
-    const apiKey = new aws_apigateway.ApiKey(this, `APIkey`, {
-      apiKeyName,
-      description: `APIKey used by my api to do awesome stuff`,
-      enabled: true,
-    })
-
-    new cdk.CfnOutput(this, 'serviceBApiKeyOut', {
-      value: apiKey.keyId,
-      description: 'api key',
-      exportName: 'serviceBApiKey',
+    const itemsTableRole = new Role(this, "serviceBItemsDynamoDBRole", {
+      assumedBy: new ServicePrincipal("appsync.amazonaws.com"),
     });
 
-    const usagePlanProps: aws_apigateway.UsagePlanProps = {
-      name: "devUsagePlan",
-      apiStages: [{api: api, stage: api.deploymentStage}],
-      throttle: {burstLimit: 500, rateLimit: 1000}, quota: {limit: 10000000, period: Period.MONTH}
-    }
-
-    api.addUsagePlan(`devUsagePlan`, usagePlanProps).addApiKey(apiKey);
-
-    const items = api.root.addResource('items');
-    items.addMethod('GET', getAllIntegration);
-    items.addMethod('POST', createOneIntegration);
-    addCorsOptions(items);
-
-    const singleItem = items.addResource('{id}');
-    singleItem.addMethod('GET', getOneIntegration);
-    singleItem.addMethod('PATCH', updateOneIntegration);
-    singleItem.addMethod('DELETE', deleteOneIntegration);
-    addCorsOptions(singleItem);
+    itemsTableRole.addManagedPolicy(
+      ManagedPolicy.fromAwsManagedPolicyName("AmazonDynamoDBFullAccess")
+    );
+    return { itemsTable, itemsTableRole };
   }
 }
 
