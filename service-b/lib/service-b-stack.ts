@@ -19,31 +19,51 @@ export class ServiceBStack extends cdk.Stack {
 
     const tableName = "serviceBItems";
 
-    const { itemsTable } = this.createTable(tableName);
+    const { itemsTable, itemsTableRole } = this.createTable(tableName);
 
     const nodeJsFunctionProps: NodejsFunctionProps = this.defineFunctionsProps(tableName, itemsTable);
     
     const { getAllIntegration, createOneIntegration, getOneIntegration, updateOneIntegration, deleteOneIntegration } = this.createFunctions(nodeJsFunctionProps, itemsTable);
 
-    const restApiKey = this.createRestApi(getAllIntegration, createOneIntegration, getOneIntegration, updateOneIntegration, deleteOneIntegration);
+    const { restApiKey, api: restApi, Role: restApiServiceRole } = this.createRestApi(getAllIntegration, createOneIntegration, getOneIntegration, updateOneIntegration, deleteOneIntegration);
 
-    this.createStackOutputs(restApiKey);
+    const { httpGraphQLApi: httpGraphQLApi, apiKey: graphQlapiKey } = this.createGraphQlApi();
+
+    const apiSchema = this.createGraphQlSchema(httpGraphQLApi, tableName);    
+
+    const dataSource = this.createGraphQlDatasource(httpGraphQLApi, restApi, restApiServiceRole);
+
+    this.createGraphQlResolvers(httpGraphQLApi, dataSource, tableName, apiSchema);
+
+    this.createStackOutputs(restApiKey, httpGraphQLApi, graphQlapiKey);
 
   }
 
-  private createStackOutputs(restApiKey: cdk.aws_apigateway.ApiKey) {
+  private createStackOutputs(restApiKey: cdk.aws_apigateway.ApiKey, itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, apiKey: cdk.aws_appsync.CfnApiKey) {
+    
     new cdk.CfnOutput(this, 'serviceBRestApiKeyOut', {
       value: restApiKey.keyId,
-      description: 'api key',
+      description: 'rest api key',
       exportName: 'serviceBRestApiKey',
+    });
+
+    new cdk.CfnOutput(this, 'GraphQlApiUrl', {
+      value: itemsGraphQLApi.attrGraphQlUrl,
+      description: 'Graphql invocation url',
+      exportName: 'ServiceBGraphQlApiUrl',
+    });
+
+    new cdk.CfnOutput(this, 'serviceBGraphQlApiKeyOut', {
+      value: apiKey.attrApiKey,
+      description: 'graphQl api key',
+      exportName: 'serviceBGraphQlApiKey',
     });
   }
 
-
-
   private createRestApi(getAllIntegration: cdk.aws_apigateway.LambdaIntegration, createOneIntegration: cdk.aws_apigateway.LambdaIntegration, getOneIntegration: cdk.aws_apigateway.LambdaIntegration, updateOneIntegration: cdk.aws_apigateway.LambdaIntegration, deleteOneIntegration: cdk.aws_apigateway.LambdaIntegration) {
-    const api = new RestApi(this, 'serviceBApi', {
-      restApiName: 'serviceBApi'
+    const restApi = new RestApi(this, 'serviceBRestApi', {
+      restApiName: 'serviceBApi',
+      cloudWatchRole: true
     });
 
     const apiKeyName = "rest-dev-key";
@@ -56,13 +76,13 @@ export class ServiceBStack extends cdk.Stack {
 
     const usagePlanProps: aws_apigateway.UsagePlanProps = {
       name: "devUsagePlan",
-      apiStages: [{ api: api, stage: api.deploymentStage }],
+      apiStages: [{ api: restApi, stage: restApi.deploymentStage }],
       throttle: { burstLimit: 500, rateLimit: 1000 }, quota: { limit: 10000000, period: Period.MONTH }
     };
 
-    api.addUsagePlan(`devUsagePlan`, usagePlanProps).addApiKey(restApiKey);
+    restApi.addUsagePlan(`devUsagePlan`, usagePlanProps).addApiKey(restApiKey);
 
-    const items = api.root.addResource('items');
+    const items = restApi.root.addResource('items');
     items.addMethod('GET', getAllIntegration);
     items.addMethod('POST', createOneIntegration);
     addCorsOptions(items);
@@ -72,7 +92,16 @@ export class ServiceBStack extends cdk.Stack {
     singleItem.addMethod('PATCH', updateOneIntegration);
     singleItem.addMethod('DELETE', deleteOneIntegration);
     addCorsOptions(singleItem);
-    return restApiKey;
+
+    const restApiServiceRole = new Role(this, "serviceBRestApiServiceRole", {
+      assumedBy: new ServicePrincipal("appsync.amazonaws.com"),
+    });
+
+    restApiServiceRole.addManagedPolicy(
+      ManagedPolicy.fromAwsManagedPolicyName("AmazonAPIGatewayInvokeFullAccess")
+    );
+ 
+    return {restApiKey, api: restApi, Role: restApiServiceRole};
   }
 
   private createFunctions(nodeJsFunctionProps: cdk.aws_lambda_nodejs.NodejsFunctionProps, itemsTable: cdk.aws_dynamodb.Table) {
@@ -149,6 +178,92 @@ export class ServiceBStack extends cdk.Stack {
       ManagedPolicy.fromAwsManagedPolicyName("AmazonDynamoDBFullAccess")
     );
     return { itemsTable, itemsTableRole };
+  }
+
+  private createGraphQlApi() {
+
+    const cloudWatchLogsRole = new Role(this, "ServiceBApiCloudWatchRole", {
+      assumedBy: new ServicePrincipal('appsync.amazonaws.com'),
+      managedPolicies: [ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSAppSyncPushToCloudWatchLogs')]
+    })
+
+    const httpGraphQLApi = new CfnGraphQLApi(this, "serviceBGraphQlApi", {
+      name: "serviceBApi",
+      authenticationType: "API_KEY",
+      logConfig: {
+        fieldLogLevel: 'ERROR',
+        cloudWatchLogsRoleArn: cloudWatchLogsRole.roleArn,
+      }
+    });
+
+    const apiKey = new CfnApiKey(this, "ServiceBApiKey", {
+      apiId: httpGraphQLApi.attrApiId,
+    });
+    return { httpGraphQLApi: httpGraphQLApi, apiKey };
+  }
+
+  private createGraphQlResolvers(httpGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, dataSource: cdk.aws_appsync.CfnDataSource, tableName: string, apiSchema: cdk.aws_appsync.CfnGraphQLSchema) {
+    const getOneResolver = new CfnResolver(this, "GetOneQueryResolver", {
+      apiId: httpGraphQLApi.attrApiId,
+      typeName: "Query",
+      fieldName: "getOne",
+      dataSourceName: dataSource.name,
+      requestMappingTemplate: `{
+        "version": "2018-05-29",
+        "method": "GET",
+        "params": {
+          "headers": {
+            "Content-Type" : "application/json",
+            "x-api-key": $context.request.headers.restApiKey
+          }
+        },
+        "resourcePath": $util.toJson("/items/$ctx.args.serviceBItemsId")
+      }`,
+      responseMappingTemplate: `
+        ## return the body
+        #if($ctx.result.statusCode == 200)
+            ##if response is 200
+            $ctx.result.body
+        #else
+            ##if response is not 200, append the response to error block.
+            $utils.appendError($ctx.result.body, "$ctx.result.statusCode")
+        #end`,
+    });
+    getOneResolver.addDependency(apiSchema);
+    getOneResolver.addDependency(dataSource);
+  }
+
+  private createGraphQlDatasource(httpGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, restApi: RestApi, restApiServiceRole: cdk.aws_iam.Role) {
+    return new CfnDataSource(this, "ServiceBHttpDataSource", {
+      apiId: httpGraphQLApi.attrApiId,
+      name: "ServiceBHttpDataSource",
+      type: "HTTP",
+      httpConfig: {
+        endpoint: restApi.url,
+      },
+      serviceRoleArn: restApiServiceRole.roleArn,
+    });
+  }
+
+  private createGraphQlSchema(itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, serviceBName: string) {
+    return new CfnGraphQLSchema(this, "serviceBschema", {
+      apiId: itemsGraphQLApi.attrApiId,
+      definition: `type ${serviceBName} {
+        ${serviceBName}Id: ID!
+        name: String
+      }
+      type Paginated${serviceBName} {
+        items: [${serviceBName}!]!
+        nextToken: String
+      }
+      type Query {
+        all(limit: Int, nextToken: String): Paginated${serviceBName}!
+        getOne(${serviceBName}Id: ID!): ${serviceBName}
+      }
+      type Schema {
+        query: Query
+      }`,
+    });
   }
 }
 
