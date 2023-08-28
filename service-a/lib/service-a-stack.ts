@@ -1,9 +1,7 @@
 import cdk = require('aws-cdk-lib');
 
-import * as logs from 'aws-cdk-lib/aws-logs';
-
 import { AttributeType, BillingMode, StreamViewType, Table, TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
-import { CfnApiKey, CfnDataSource, CfnGraphQLApi, CfnGraphQLSchema, CfnResolver, FieldLogLevel } from 'aws-cdk-lib/aws-appsync';
+import { CfnApiKey, CfnDataSource, CfnGraphQLApi, CfnGraphQLSchema, CfnResolver, FieldLogLevel, LogConfig } from 'aws-cdk-lib/aws-appsync';
 import { ManagedPolicy, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 
 import { Construct } from 'constructs';
@@ -145,16 +143,13 @@ export class ServiceAStack extends cdk.Stack {
       managedPolicies: [ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSAppSyncPushToCloudWatchLogs')]
     })
 
-    const logConfig: cdk.aws_appsync.LogConfig = {
-      retention: logs.RetentionDays.ONE_DAY,
-      fieldLogLevel: FieldLogLevel.ERROR,
-      role: cloudWatchLogsRole
-    };
-
     const itemsGraphQLApi = new CfnGraphQLApi(this, "serviceAApi", {
       name: "serviceAApi",
       authenticationType: "API_KEY",
-      logConfig
+      logConfig: {
+        fieldLogLevel: FieldLogLevel.ERROR,
+        cloudWatchLogsRoleArn: cloudWatchLogsRole.roleArn
+      }
     });
 
     const apiKey = new CfnApiKey(this, "ServiceAApiKey", {
