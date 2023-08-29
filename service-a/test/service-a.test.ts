@@ -26,8 +26,6 @@ test("All resources created", () => {
   });
   template.resourceCountIs('AWS::DynamoDB::Table', 1);
 
-  
-  
   template.hasResourceProperties('AWS::AppSync::GraphQLApi', {
     Name: 'serviceAApi'
   });
