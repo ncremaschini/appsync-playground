@@ -33,7 +33,7 @@ export class ServiceBStack extends cdk.Stack {
 
     const dataSource = this.createGraphQlDatasource(httpGraphQLApi, restApi, restApiServiceRole);
 
-    this.createGraphQlResolvers(httpGraphQLApi, dataSource, tableName, apiSchema);
+    this.createGraphQlResolvers(httpGraphQLApi, dataSource, tableName, apiSchema,restApiKey);
 
     this.createStackOutputs(restApiKey, httpGraphQLApi, graphQlapiKey);
 
@@ -63,8 +63,32 @@ export class ServiceBStack extends cdk.Stack {
   private createRestApi(getAllIntegration: cdk.aws_apigateway.LambdaIntegration, createOneIntegration: cdk.aws_apigateway.LambdaIntegration, getOneIntegration: cdk.aws_apigateway.LambdaIntegration, updateOneIntegration: cdk.aws_apigateway.LambdaIntegration, deleteOneIntegration: cdk.aws_apigateway.LambdaIntegration) {
     const restApi = new RestApi(this, 'serviceBRestApi', {
       restApiName: 'serviceBApi',
-      cloudWatchRole: true
+      cloudWatchRole: true,
     });
+
+    const stage = restApi.deploymentStage!.node.defaultChild as cdk.aws_apigateway.CfnStage;
+    const logGroup = new logs.LogGroup(restApi, 'AccessLogs', {
+      logGroupName: "/aws/apigateway/" + restApi.restApiId + "/access_logs",
+      retention: 1, 
+    });
+
+    stage.tracingEnabled = true;
+
+    stage.accessLogSetting = {
+      destinationArn: logGroup.logGroupArn,
+      format: JSON.stringify({
+        requestId: '$context.requestId',
+        userAgent: '$context.identity.userAgent',
+        sourceIp: '$context.identity.sourceIp',
+        requestTime: '$context.requestTime',
+        httpMethod: '$context.httpMethod',
+        path: '$context.path',
+        status: '$context.status',
+        responseLength: '$context.responseLength',
+      }),
+    };
+
+    logGroup.grantWrite(new ServicePrincipal('apigateway.amazonaws.com'));
 
     const apiKeyName = "rest-dev-key";
 
@@ -202,30 +226,34 @@ export class ServiceBStack extends cdk.Stack {
     return { httpGraphQLApi: httpGraphQLApi, apiKey };
   }
 
-  private createGraphQlResolvers(httpGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, dataSource: cdk.aws_appsync.CfnDataSource, tableName: string, apiSchema: cdk.aws_appsync.CfnGraphQLSchema) {
+  private createGraphQlResolvers(httpGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, dataSource: cdk.aws_appsync.CfnDataSource, tableName: string, apiSchema: cdk.aws_appsync.CfnGraphQLSchema, restApiKey: cdk.aws_apigateway.ApiKey) {
     const getOneResolver = new CfnResolver(this, "GetOneQueryResolver", {
       apiId: httpGraphQLApi.attrApiId,
       typeName: "Query",
       fieldName: "getOne",
       dataSourceName: dataSource.name,
       requestMappingTemplate: `{
-        "version": "2018-05-29",
-        "method": "GET",
-        "params": {
-          "headers": {
-            "Content-Type" : "application/json",
-            "x-api-key": "t59gepnvzf"
-          }
-        },
-        "resourcePath": $util.toJson("/items/$ctx.args.serviceBItemsId")
+          "version": "2018-05-29",
+          "method": "GET",
+          "params": {
+            "headers": {
+              "Content-Type" : "application/json",
+              "x-api-key": "${restApiKey.keyId}"
+            } 
+          },
+          "resourcePath": $util.toJson("/items/$ctx.args.serviceBItemsId")
       }`,
       responseMappingTemplate: `
-        ## return the body
+        ## Raise a GraphQL field error in case of a datasource invocation error
+        #if($ctx.error)
+            $util.error($ctx.error.message, $ctx.error.type)
+        #end
+        ## if the response status code is not 200, then return an error. Else return the body **
         #if($ctx.result.statusCode == 200)
-            ##if response is 200
+            ## If response is 200, return the body.
             $ctx.result.body
         #else
-            ##if response is not 200, append the response to error block.
+            ## If response is not 200, append the response to error block.
             $utils.appendError($ctx.result.body, "$ctx.result.statusCode")
         #end`,
     });
