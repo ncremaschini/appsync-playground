@@ -33,5 +33,5 @@ test("All resources created", () => {
   
   template.resourceCountIs('AWS::ApiGateway::RestApi', 1);
 
-  template.resourceCountIs('AWS::Lambda::Function', 5);
+  template.resourceCountIs('AWS::AppSync::GraphQLApi', 1);
 });
