@@ -73,7 +73,7 @@ export class ServiceBStack extends cdk.Stack {
     });
 
     stage.tracingEnabled = true;
-
+  
     stage.accessLogSetting = {
       destinationArn: logGroup.logGroupArn,
       format: JSON.stringify({
