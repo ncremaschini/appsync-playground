@@ -35,7 +35,7 @@ export class ServiceAStack extends cdk.Stack {
         "version": "2017-02-28",
         "operation": "GetItem",
         "key": {
-          "${tableName}Id": $util.dynamodb.toDynamoDBJson($ctx.args.${tableName}Id)
+          "id": $util.dynamodb.toDynamoDBJson($ctx.args.id)
         }
       }`,
       responseMappingTemplate: `$util.toJson($ctx.result)`,
@@ -68,7 +68,7 @@ export class ServiceAStack extends cdk.Stack {
         "version": "2017-02-28",
         "operation": "PutItem",
         "key": {
-          "${tableName}Id": { "S": "$util.autoId()" }
+          "id": { "S": "$util.autoId()" }
         },
         "attributeValues": {
           "name": $util.dynamodb.toDynamoDBJson($ctx.args.name)
@@ -88,7 +88,7 @@ export class ServiceAStack extends cdk.Stack {
         "version": "2017-02-28",
         "operation": "DeleteItem",
         "key": {
-          "${tableName}Id": $util.dynamodb.toDynamoDBJson($ctx.args.${tableName}Id)
+          "id": $util.dynamodb.toDynamoDBJson($ctx.args.id)
         }
       }`,
       responseMappingTemplate: `$util.toJson($ctx.result)`,
@@ -114,7 +114,7 @@ export class ServiceAStack extends cdk.Stack {
     return new CfnGraphQLSchema(this, "serviceAschema", {
       apiId: itemsGraphQLApi.attrApiId,
       definition: `type ${tableName} {
-        ${tableName}Id: ID!
+        id: ID!
         name: String
       }
       type Paginated${tableName} {
@@ -123,11 +123,11 @@ export class ServiceAStack extends cdk.Stack {
       }
       type Query {
         all(limit: Int, nextToken: String): Paginated${tableName}!
-        getOne(${tableName}Id: ID!): ${tableName}
+        getOne(id: ID!): ${tableName}
       }
       type Mutation {
         save(name: String!): ${tableName}
-        delete(${tableName}Id: ID!): ${tableName}
+        delete(id: ID!): ${tableName}
       }
       type Schema {
         query: Query
@@ -170,7 +170,7 @@ export class ServiceAStack extends cdk.Stack {
     const itemsTable = new Table(this, "serviceAItems", {
       tableName: tableName,
       partitionKey: {
-        name: `${tableName}Id`,
+        name: `id`,
         type: AttributeType.STRING,
       },
       encryption: TableEncryption.AWS_MANAGED,
