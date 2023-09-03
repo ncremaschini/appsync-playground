@@ -42,12 +42,6 @@ export class ServiceBStack extends cdk.Stack {
 
   private createStackOutputs(secretValue: SecretValue, itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, apiKey: cdk.aws_appsync.CfnApiKey) {
     
-    new cdk.CfnOutput(this, 'serviceBRestApiKeyOut', {
-      value: secretValue.unsafeUnwrap().toString(),
-      description: 'rest api key',
-      exportName: 'serviceBRestApiKey',
-    });
-
     new cdk.CfnOutput(this, 'GraphQlApiUrl', {
       value: itemsGraphQLApi.attrGraphQlUrl,
       description: 'Graphql invocation url',

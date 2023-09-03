@@ -164,12 +164,6 @@ export class ServiceAStack extends cdk.Stack {
       description: 'Graphql invocation url',
       exportName: 'apiUrl',
     });
-
-    new cdk.CfnOutput(this, 'serviceAApiKeyOut', {
-      value: apiKey.attrApiKey,
-      description: 'api key',
-      exportName: 'serviceAApiKey',
-    });
   }
 
   private createTable(tableName: string) {
