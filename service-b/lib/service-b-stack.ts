@@ -7,6 +7,7 @@ import { CfnApiKey, CfnDataSource, CfnGraphQLApi, CfnGraphQLSchema, CfnResolver,
 import { IResource, LambdaIntegration, MockIntegration, PassthroughBehavior, Period, RestApi } from 'aws-cdk-lib/aws-apigateway';
 import { ManagedPolicy, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import { NodejsFunction, NodejsFunctionProps } from 'aws-cdk-lib/aws-lambda-nodejs';
+import { SecretValue, aws_secretsmanager } from 'aws-cdk-lib';
 
 import { Construct } from 'constructs';
 import { Runtime } from 'aws-cdk-lib/aws-lambda';
@@ -25,7 +26,7 @@ export class ServiceBStack extends cdk.Stack {
     
     const { getAllIntegration, createOneIntegration, getOneIntegration, updateOneIntegration, deleteOneIntegration } = this.createFunctions(nodeJsFunctionProps, itemsTable);
 
-    const { restApiKey, api: restApi, Role: restApiServiceRole } = this.createRestApi(getAllIntegration, createOneIntegration, getOneIntegration, updateOneIntegration, deleteOneIntegration);
+    const { SecretValue: secretValue, api: restApi, Role: restApiServiceRole } = this.createRestApi(getAllIntegration, createOneIntegration, getOneIntegration, updateOneIntegration, deleteOneIntegration);
 
     const { httpGraphQLApi: httpGraphQLApi, apiKey: graphQlapiKey } = this.createGraphQlApi();
 
@@ -33,16 +34,16 @@ export class ServiceBStack extends cdk.Stack {
 
     const dataSource = this.createGraphQlDatasource(httpGraphQLApi, restApi, restApiServiceRole);
 
-    this.createGraphQlResolvers(httpGraphQLApi, dataSource, tableName, apiSchema,restApiKey);
+    this.createGraphQlResolvers(httpGraphQLApi, dataSource, tableName, apiSchema,secretValue);
 
-    this.createStackOutputs(restApiKey, httpGraphQLApi, graphQlapiKey);
+    this.createStackOutputs(secretValue, httpGraphQLApi, graphQlapiKey);
 
   }
 
-  private createStackOutputs(restApiKey: cdk.aws_apigateway.ApiKey, itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, apiKey: cdk.aws_appsync.CfnApiKey) {
+  private createStackOutputs(secretValue: SecretValue, itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, apiKey: cdk.aws_appsync.CfnApiKey) {
     
     new cdk.CfnOutput(this, 'serviceBRestApiKeyOut', {
-      value: restApiKey.keyId,
+      value: secretValue.unsafeUnwrap().toString(),
       description: 'rest api key',
       exportName: 'serviceBRestApiKey',
     });
@@ -67,6 +68,8 @@ export class ServiceBStack extends cdk.Stack {
     });
 
     const stage = restApi.deploymentStage!.node.defaultChild as cdk.aws_apigateway.CfnStage;
+    stage.stageName = 'v1';
+    
     const logGroup = new logs.LogGroup(restApi, 'AccessLogs', {
       logGroupName: "/aws/apigateway/" + restApi.restApiId + "/access_logs",
       retention: 1, 
@@ -92,10 +95,21 @@ export class ServiceBStack extends cdk.Stack {
 
     const apiKeyName = "rest-dev-key";
 
+    const secret = new aws_secretsmanager.Secret(this, 'serviceB/restApiKey', {
+      generateSecretString: {
+          generateStringKey: 'api_key',
+          secretStringTemplate: JSON.stringify({ username: 'web_user' }),
+          excludeCharacters: ' %+~`#$&*()|[]{}:;<>?!\'/@"\\',
+      },
+    });
+
+    const secretValue = secret.secretValueFromJson('api_key');
+    
     const restApiKey = new aws_apigateway.ApiKey(this, `RestAPIkey`, {
       apiKeyName,
       description: `Rest APIKey of service B`,
       enabled: true,
+      value: secretValue.unsafeUnwrap().toString()
     });
 
     const usagePlanProps: aws_apigateway.UsagePlanProps = {
@@ -107,14 +121,24 @@ export class ServiceBStack extends cdk.Stack {
     restApi.addUsagePlan(`devUsagePlan`, usagePlanProps).addApiKey(restApiKey);
 
     const items = restApi.root.addResource('items');
-    items.addMethod('GET', getAllIntegration);
-    items.addMethod('POST', createOneIntegration);
+    items.addMethod('GET', getAllIntegration,{
+      apiKeyRequired: true
+    });
+    items.addMethod('POST', createOneIntegration,{
+      apiKeyRequired: true
+    });
     addCorsOptions(items);
 
     const singleItem = items.addResource('{id}');
-    singleItem.addMethod('GET', getOneIntegration);
-    singleItem.addMethod('PATCH', updateOneIntegration);
-    singleItem.addMethod('DELETE', deleteOneIntegration);
+    singleItem.addMethod('GET', getOneIntegration,{
+      apiKeyRequired: true
+    });
+    singleItem.addMethod('PATCH', updateOneIntegration,{
+      apiKeyRequired: true
+    });
+    singleItem.addMethod('DELETE', deleteOneIntegration,{
+      apiKeyRequired: true
+    });
     addCorsOptions(singleItem);
 
     const restApiServiceRole = new Role(this, "serviceBRestApiServiceRole", {
@@ -125,7 +149,7 @@ export class ServiceBStack extends cdk.Stack {
       ManagedPolicy.fromAwsManagedPolicyName("AmazonAPIGatewayInvokeFullAccess")
     );
  
-    return {restApiKey, api: restApi, Role: restApiServiceRole};
+    return {SecretValue: secretValue, api: restApi, Role: restApiServiceRole};
   }
 
   private createFunctions(nodeJsFunctionProps: cdk.aws_lambda_nodejs.NodejsFunctionProps, itemsTable: cdk.aws_dynamodb.Table) {
@@ -173,7 +197,7 @@ export class ServiceBStack extends cdk.Stack {
       },
       depsLockFilePath: join(__dirname, 'lambdas', 'package-lock.json'),
       environment: {
-        PRIMARY_KEY: `${tableName}Id`,
+        PRIMARY_KEY: `id`,
         TABLE_NAME: itemsTable.tableName,
       },
       runtime: Runtime.NODEJS_18_X,
@@ -185,7 +209,7 @@ export class ServiceBStack extends cdk.Stack {
     const itemsTable = new Table(this, "serviceBItems", {
       tableName: tableName,
       partitionKey: {
-        name: `${tableName}Id`,
+        name: `id`,
         type: AttributeType.STRING,
       },
       encryption: TableEncryption.AWS_MANAGED,
@@ -226,7 +250,7 @@ export class ServiceBStack extends cdk.Stack {
     return { httpGraphQLApi: httpGraphQLApi, apiKey };
   }
 
-  private createGraphQlResolvers(httpGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, dataSource: cdk.aws_appsync.CfnDataSource, tableName: string, apiSchema: cdk.aws_appsync.CfnGraphQLSchema, restApiKey: cdk.aws_apigateway.ApiKey) {
+  private createGraphQlResolvers(httpGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, dataSource: cdk.aws_appsync.CfnDataSource, tableName: string, apiSchema: cdk.aws_appsync.CfnGraphQLSchema, secretValue: SecretValue) {
     const getOneResolver = new CfnResolver(this, "GetOneQueryResolver", {
       apiId: httpGraphQLApi.attrApiId,
       typeName: "Query",
@@ -238,10 +262,10 @@ export class ServiceBStack extends cdk.Stack {
           "params": {
             "headers": {
               "Content-Type" : "application/json",
-              "x-api-key": "${restApiKey.keyId}"
+              "x-api-key": "${secretValue.unsafeUnwrap().toString()}"
             } 
           },
-          "resourcePath": $util.toJson("/items/$ctx.args.serviceBItemsId")
+          "resourcePath": $util.toJson("/items/$ctx.args.id")
       }`,
       responseMappingTemplate: `
         ## Raise a GraphQL field error in case of a datasource invocation error
@@ -267,7 +291,7 @@ export class ServiceBStack extends cdk.Stack {
       name: "ServiceBHttpDataSource",
       type: "HTTP",
       httpConfig: {
-        endpoint: restApi.url,
+        endpoint: restApi.urlForPath(),
       },
       serviceRoleArn: restApiServiceRole.roleArn,
     });
@@ -277,7 +301,7 @@ export class ServiceBStack extends cdk.Stack {
     return new CfnGraphQLSchema(this, "serviceBschema", {
       apiId: itemsGraphQLApi.attrApiId,
       definition: `type ${serviceBName} {
-        ${serviceBName}Id: ID!
+        id: ID!
         name: String
       }
       type Paginated${serviceBName} {
@@ -286,7 +310,7 @@ export class ServiceBStack extends cdk.Stack {
       }
       type Query {
         all(limit: Int, nextToken: String): Paginated${serviceBName}!
-        getOne(${serviceBName}Id: ID!): ${serviceBName}
+        getOne(id: ID!): ${serviceBName}
       }
       type Schema {
         query: Query
