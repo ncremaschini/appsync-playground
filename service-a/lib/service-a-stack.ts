@@ -57,6 +57,7 @@ export class ServiceAStack extends cdk.Stack {
       managedPolicies: [ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSAppSyncPushToCloudWatchLogs')]
     })
 
+    
     const itemsGraphQLApi = new CfnGraphQLApi(this, "serviceAApi", {
       name: "serviceAApi",
       authenticationType: "API_KEY",
