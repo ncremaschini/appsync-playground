@@ -1,6 +1,7 @@
 import cdk = require('aws-cdk-lib');
 
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 
 import { AttributeType, BillingMode, StreamViewType, Table, TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
 import { CfnApiKey, CfnDataSource, CfnGraphQLApi, CfnGraphQLSchema, CfnResolver, FieldLogLevel, LogConfig } from 'aws-cdk-lib/aws-appsync';
@@ -36,7 +37,7 @@ export class ServiceBStack extends cdk.Stack {
 
     this.createGraphQlResolvers(httpGraphQLApi, dataSource, stage, apiSchema,secretValue);
 
-    this.createStackOutputs(secretValue, httpGraphQLApi, graphQlapiKey);
+    this.createStackOutputs(httpGraphQLApi, graphQlapiKey);
 
   }
 
@@ -153,6 +154,7 @@ export class ServiceBStack extends cdk.Stack {
 
     const secret = new aws_secretsmanager.Secret(this, 'serviceBrestApiKeySecret', {
       secretName: 'serviceB/restApiKey',
+      description: 'Rest APIKey of service B',
       generateSecretString: {
           generateStringKey: 'api_key',
           secretStringTemplate: JSON.stringify({ username: 'web_user' }),
@@ -228,6 +230,17 @@ export class ServiceBStack extends cdk.Stack {
     const apiKey = new CfnApiKey(this, "ServiceBApiKey", {
       apiId: httpGraphQLApi.attrApiId,
     });
+
+    //store api id into ssm
+    new ssm.StringParameter(this, 'serviceBApiIdParam', {
+      parameterName: '/serviceB/graphQlApiId',
+      stringValue: httpGraphQLApi.attrApiId,
+      description: 'Service B graphQl Api id',
+      dataType: ssm.ParameterDataType.TEXT,
+      tier: ssm.ParameterTier.STANDARD,
+      allowedPattern: '.*',
+    });
+
     return { httpGraphQLApi: httpGraphQLApi, apiKey };
   }
 
@@ -303,7 +316,7 @@ export class ServiceBStack extends cdk.Stack {
     getOneResolver.addDependency(dataSource);
   }
 
-  private createStackOutputs(secretValue: SecretValue, itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, apiKey: cdk.aws_appsync.CfnApiKey) {
+  private createStackOutputs(itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, apiKey: cdk.aws_appsync.CfnApiKey) {
     
     new cdk.CfnOutput(this, 'GraphQlApiUrl', {
       value: itemsGraphQLApi.attrGraphQlUrl,
