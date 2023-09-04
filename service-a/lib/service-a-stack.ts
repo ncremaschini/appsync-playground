@@ -1,5 +1,7 @@
 import cdk = require('aws-cdk-lib');
 
+import * as ssm from 'aws-cdk-lib/aws-ssm';
+
 import { AttributeType, BillingMode, StreamViewType, Table, TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
 import { CfnApiKey, CfnDataSource, CfnGraphQLApi, CfnGraphQLSchema, CfnResolver, FieldLogLevel, LogConfig } from 'aws-cdk-lib/aws-appsync';
 import { ManagedPolicy, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
@@ -67,6 +69,17 @@ export class ServiceAStack extends cdk.Stack {
     const apiKey = new CfnApiKey(this, "ServiceAApiKey", {
       apiId: itemsGraphQLApi.attrApiId,
     });
+
+    //store api id into ssm
+    new ssm.StringParameter(this, 'serviceAApiIdParam', {
+      parameterName: '/serviceA/graphQlApiId',
+      stringValue: itemsGraphQLApi.attrApiId,
+      description: 'Service A graphQl Api id',
+      dataType: ssm.ParameterDataType.TEXT,
+      tier: ssm.ParameterTier.STANDARD,
+      allowedPattern: '.*',
+    });
+
     return { itemsGraphQLApi, apiKey };
   }
 
