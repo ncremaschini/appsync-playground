@@ -26,7 +26,7 @@ export class ServiceBStack extends cdk.Stack {
     
     const { getAllIntegration, createOneIntegration, getOneIntegration, updateOneIntegration, deleteOneIntegration } = this.createFunctions(nodeJsFunctionProps, itemsTable);
 
-    const { SecretValue: secretValue, api: restApi, Role: restApiServiceRole } = this.createRestApi(getAllIntegration, createOneIntegration, getOneIntegration, updateOneIntegration, deleteOneIntegration);
+    const { SecretValue: secretValue, api: restApi, Role: restApiServiceRole, string: stage } = this.createRestApi(getAllIntegration, createOneIntegration, getOneIntegration, updateOneIntegration, deleteOneIntegration);
 
     const { httpGraphQLApi: httpGraphQLApi, apiKey: graphQlapiKey } = this.createGraphQlApi();
 
@@ -34,7 +34,7 @@ export class ServiceBStack extends cdk.Stack {
 
     const dataSource = this.createGraphQlDatasource(httpGraphQLApi, restApi, restApiServiceRole);
 
-    this.createGraphQlResolvers(httpGraphQLApi, dataSource, tableName, apiSchema,secretValue);
+    this.createGraphQlResolvers(httpGraphQLApi, dataSource, stage, apiSchema,secretValue);
 
     this.createStackOutputs(secretValue, httpGraphQLApi, graphQlapiKey);
 
@@ -151,7 +151,8 @@ export class ServiceBStack extends cdk.Stack {
 
     const apiKeyName = "rest-dev-key";
 
-    const secret = new aws_secretsmanager.Secret(this, 'serviceB/restApiKey', {
+    const secret = new aws_secretsmanager.Secret(this, 'serviceBrestApiKeySecret', {
+      secretName: 'serviceB/restApiKey',
       generateSecretString: {
           generateStringKey: 'api_key',
           secretStringTemplate: JSON.stringify({ username: 'web_user' }),
@@ -161,7 +162,7 @@ export class ServiceBStack extends cdk.Stack {
 
     const secretValue = secret.secretValueFromJson('api_key');
     
-    const restApiKey = new aws_apigateway.ApiKey(this, `RestAPIkey`, {
+    const restApiKey = new aws_apigateway.ApiKey(this, `restApiKey`, {
       apiKeyName,
       description: `Rest APIKey of service B`,
       enabled: true,
@@ -205,7 +206,7 @@ export class ServiceBStack extends cdk.Stack {
       ManagedPolicy.fromAwsManagedPolicyName("AmazonAPIGatewayInvokeFullAccess")
     );
  
-    return {SecretValue: secretValue, api: restApi, Role: restApiServiceRole};
+    return {SecretValue: secretValue, api: restApi, Role: restApiServiceRole, string: stage.stageName};
   }
  
   private createGraphQlApi() {
@@ -252,18 +253,22 @@ export class ServiceBStack extends cdk.Stack {
   }
 
   private createGraphQlDatasource(httpGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, restApi: RestApi, restApiServiceRole: cdk.aws_iam.Role) {
+    
+    //if datasource endpoint contains stage name, remove it
+    const httpPath = restApi.urlForPath().replace("/" + restApi.deploymentStage.stageName, "");
+    
     return new CfnDataSource(this, "ServiceBHttpDataSource", {
       apiId: httpGraphQLApi.attrApiId,
       name: "ServiceBHttpDataSource",
       type: "HTTP",
       httpConfig: {
-        endpoint: restApi.urlForPath(),
+        endpoint: httpPath,
       },
       serviceRoleArn: restApiServiceRole.roleArn,
     });
   }
 
-  private createGraphQlResolvers(httpGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, dataSource: cdk.aws_appsync.CfnDataSource, tableName: string, apiSchema: cdk.aws_appsync.CfnGraphQLSchema, secretValue: SecretValue) {
+  private createGraphQlResolvers(httpGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, dataSource: cdk.aws_appsync.CfnDataSource, stage: string, apiSchema: cdk.aws_appsync.CfnGraphQLSchema, secretValue: SecretValue) {
     const getOneResolver = new CfnResolver(this, "GetOneQueryResolver", {
       apiId: httpGraphQLApi.attrApiId,
       typeName: "Query",
@@ -278,7 +283,7 @@ export class ServiceBStack extends cdk.Stack {
               "x-api-key": "${secretValue.unsafeUnwrap().toString()}"
             } 
           },
-          "resourcePath": $util.toJson("/items/$ctx.args.id")
+          "resourcePath": $util.toJson("/${stage}/items/$ctx.args.id")
       }`,
       responseMappingTemplate: `
         ## Raise a GraphQL field error in case of a datasource invocation error
