@@ -40,20 +40,82 @@ export class ServiceBStack extends cdk.Stack {
 
   }
 
-  private createStackOutputs(secretValue: SecretValue, itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, apiKey: cdk.aws_appsync.CfnApiKey) {
-    
-    new cdk.CfnOutput(this, 'GraphQlApiUrl', {
-      value: itemsGraphQLApi.attrGraphQlUrl,
-      description: 'Graphql invocation url',
-      exportName: 'ServiceBGraphQlApiUrl',
+  private createTable(tableName: string) {
+    const itemsTable = new Table(this, "serviceBItems", {
+      tableName: tableName,
+      partitionKey: {
+        name: `id`,
+        type: AttributeType.STRING,
+      },
+      encryption: TableEncryption.AWS_MANAGED,
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      stream: StreamViewType.NEW_IMAGE,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    new cdk.CfnOutput(this, 'serviceBGraphQlApiKeyOut', {
-      value: apiKey.attrApiKey,
-      description: 'graphQl api key',
-      exportName: 'serviceBGraphQlApiKey',
+    const itemsTableRole = new Role(this, "serviceBItemsDynamoDBRole", {
+      assumedBy: new ServicePrincipal("appsync.amazonaws.com"),
     });
+
+    itemsTableRole.addManagedPolicy(
+      ManagedPolicy.fromAwsManagedPolicyName("AmazonDynamoDBFullAccess")
+    );
+    return { itemsTable, itemsTableRole };
   }
+
+  private defineFunctionsProps(tableName: string, itemsTable: cdk.aws_dynamodb.Table): cdk.aws_lambda_nodejs.NodejsFunctionProps {
+    return {
+      bundling: {
+        externalModules: [],
+      },
+      depsLockFilePath: join(__dirname, 'lambdas', 'package-lock.json'),
+      environment: {
+        PRIMARY_KEY: `id`,
+        TABLE_NAME: itemsTable.tableName,
+      },
+      runtime: Runtime.NODEJS_18_X,
+      logRetention: logs.RetentionDays.ONE_DAY
+    };
+  }
+
+  private createFunctions(nodeJsFunctionProps: cdk.aws_lambda_nodejs.NodejsFunctionProps, itemsTable: cdk.aws_dynamodb.Table) {
+    const getOneLambda = new NodejsFunction(this, 'getOneItemFunction', {
+      entry: join(__dirname, 'lambdas', 'get-one.ts'),
+      ...nodeJsFunctionProps,
+    });
+    const getAllLambda = new NodejsFunction(this, 'getAllItemsFunction', {
+      entry: join(__dirname, 'lambdas', 'get-all.ts'),
+      ...nodeJsFunctionProps,
+    });
+    const createOneLambda = new NodejsFunction(this, 'createItemFunction', {
+      entry: join(__dirname, 'lambdas', 'create.ts'),
+      ...nodeJsFunctionProps,
+    });
+    const updateOneLambda = new NodejsFunction(this, 'updateItemFunction', {
+      entry: join(__dirname, 'lambdas', 'update-one.ts'),
+      ...nodeJsFunctionProps,
+    });
+    const deleteOneLambda = new NodejsFunction(this, 'deleteItemFunction', {
+      entry: join(__dirname, 'lambdas', 'delete-one.ts'),
+      ...nodeJsFunctionProps,
+    });
+
+    // Grant the Lambda function read access to the DynamoDB table
+    itemsTable.grantReadWriteData(getAllLambda);
+    itemsTable.grantReadWriteData(getOneLambda);
+    itemsTable.grantReadWriteData(createOneLambda);
+    itemsTable.grantReadWriteData(updateOneLambda);
+    itemsTable.grantReadWriteData(deleteOneLambda);
+
+    // Integrate the Lambda functions with the API Gateway resource
+    const getAllIntegration = new LambdaIntegration(getAllLambda);
+    const createOneIntegration = new LambdaIntegration(createOneLambda);
+    const getOneIntegration = new LambdaIntegration(getOneLambda);
+    const updateOneIntegration = new LambdaIntegration(updateOneLambda);
+    const deleteOneIntegration = new LambdaIntegration(deleteOneLambda);
+    return { getAllIntegration, createOneIntegration, getOneIntegration, updateOneIntegration, deleteOneIntegration };
+  }
+
 
   private createRestApi(getAllIntegration: cdk.aws_apigateway.LambdaIntegration, createOneIntegration: cdk.aws_apigateway.LambdaIntegration, getOneIntegration: cdk.aws_apigateway.LambdaIntegration, updateOneIntegration: cdk.aws_apigateway.LambdaIntegration, deleteOneIntegration: cdk.aws_apigateway.LambdaIntegration) {
     const restApi = new RestApi(this, 'serviceBRestApi', {
@@ -145,83 +207,7 @@ export class ServiceBStack extends cdk.Stack {
  
     return {SecretValue: secretValue, api: restApi, Role: restApiServiceRole};
   }
-
-  private createFunctions(nodeJsFunctionProps: cdk.aws_lambda_nodejs.NodejsFunctionProps, itemsTable: cdk.aws_dynamodb.Table) {
-    const getOneLambda = new NodejsFunction(this, 'getOneItemFunction', {
-      entry: join(__dirname, 'lambdas', 'get-one.ts'),
-      ...nodeJsFunctionProps,
-    });
-    const getAllLambda = new NodejsFunction(this, 'getAllItemsFunction', {
-      entry: join(__dirname, 'lambdas', 'get-all.ts'),
-      ...nodeJsFunctionProps,
-    });
-    const createOneLambda = new NodejsFunction(this, 'createItemFunction', {
-      entry: join(__dirname, 'lambdas', 'create.ts'),
-      ...nodeJsFunctionProps,
-    });
-    const updateOneLambda = new NodejsFunction(this, 'updateItemFunction', {
-      entry: join(__dirname, 'lambdas', 'update-one.ts'),
-      ...nodeJsFunctionProps,
-    });
-    const deleteOneLambda = new NodejsFunction(this, 'deleteItemFunction', {
-      entry: join(__dirname, 'lambdas', 'delete-one.ts'),
-      ...nodeJsFunctionProps,
-    });
-
-    // Grant the Lambda function read access to the DynamoDB table
-    itemsTable.grantReadWriteData(getAllLambda);
-    itemsTable.grantReadWriteData(getOneLambda);
-    itemsTable.grantReadWriteData(createOneLambda);
-    itemsTable.grantReadWriteData(updateOneLambda);
-    itemsTable.grantReadWriteData(deleteOneLambda);
-
-    // Integrate the Lambda functions with the API Gateway resource
-    const getAllIntegration = new LambdaIntegration(getAllLambda);
-    const createOneIntegration = new LambdaIntegration(createOneLambda);
-    const getOneIntegration = new LambdaIntegration(getOneLambda);
-    const updateOneIntegration = new LambdaIntegration(updateOneLambda);
-    const deleteOneIntegration = new LambdaIntegration(deleteOneLambda);
-    return { getAllIntegration, createOneIntegration, getOneIntegration, updateOneIntegration, deleteOneIntegration };
-  }
-
-  private defineFunctionsProps(tableName: string, itemsTable: cdk.aws_dynamodb.Table): cdk.aws_lambda_nodejs.NodejsFunctionProps {
-    return {
-      bundling: {
-        externalModules: [],
-      },
-      depsLockFilePath: join(__dirname, 'lambdas', 'package-lock.json'),
-      environment: {
-        PRIMARY_KEY: `id`,
-        TABLE_NAME: itemsTable.tableName,
-      },
-      runtime: Runtime.NODEJS_18_X,
-      logRetention: logs.RetentionDays.ONE_DAY
-    };
-  }
-
-  private createTable(tableName: string) {
-    const itemsTable = new Table(this, "serviceBItems", {
-      tableName: tableName,
-      partitionKey: {
-        name: `id`,
-        type: AttributeType.STRING,
-      },
-      encryption: TableEncryption.AWS_MANAGED,
-      billingMode: BillingMode.PAY_PER_REQUEST,
-      stream: StreamViewType.NEW_IMAGE,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-
-    const itemsTableRole = new Role(this, "serviceBItemsDynamoDBRole", {
-      assumedBy: new ServicePrincipal("appsync.amazonaws.com"),
-    });
-
-    itemsTableRole.addManagedPolicy(
-      ManagedPolicy.fromAwsManagedPolicyName("AmazonDynamoDBFullAccess")
-    );
-    return { itemsTable, itemsTableRole };
-  }
-
+ 
   private createGraphQlApi() {
 
     const cloudWatchLogsRole = new Role(this, "ServiceBApiCloudWatchRole", {
@@ -242,6 +228,39 @@ export class ServiceBStack extends cdk.Stack {
       apiId: httpGraphQLApi.attrApiId,
     });
     return { httpGraphQLApi: httpGraphQLApi, apiKey };
+  }
+
+  private createGraphQlSchema(itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, serviceBName: string) {
+    return new CfnGraphQLSchema(this, "serviceBschema", {
+      apiId: itemsGraphQLApi.attrApiId,
+      definition: `type ${serviceBName} {
+        id: ID!
+        name: String
+      }
+      type Paginated${serviceBName} {
+        items: [${serviceBName}!]!
+        nextToken: String
+      }
+      type Query {
+        all(limit: Int, nextToken: String): Paginated${serviceBName}!
+        getOne(id: ID!): ${serviceBName}
+      }
+      type Schema {
+        query: Query
+      }`,
+    });
+  }
+
+  private createGraphQlDatasource(httpGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, restApi: RestApi, restApiServiceRole: cdk.aws_iam.Role) {
+    return new CfnDataSource(this, "ServiceBHttpDataSource", {
+      apiId: httpGraphQLApi.attrApiId,
+      name: "ServiceBHttpDataSource",
+      type: "HTTP",
+      httpConfig: {
+        endpoint: restApi.urlForPath(),
+      },
+      serviceRoleArn: restApiServiceRole.roleArn,
+    });
   }
 
   private createGraphQlResolvers(httpGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, dataSource: cdk.aws_appsync.CfnDataSource, tableName: string, apiSchema: cdk.aws_appsync.CfnGraphQLSchema, secretValue: SecretValue) {
@@ -279,36 +298,18 @@ export class ServiceBStack extends cdk.Stack {
     getOneResolver.addDependency(dataSource);
   }
 
-  private createGraphQlDatasource(httpGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, restApi: RestApi, restApiServiceRole: cdk.aws_iam.Role) {
-    return new CfnDataSource(this, "ServiceBHttpDataSource", {
-      apiId: httpGraphQLApi.attrApiId,
-      name: "ServiceBHttpDataSource",
-      type: "HTTP",
-      httpConfig: {
-        endpoint: restApi.urlForPath(),
-      },
-      serviceRoleArn: restApiServiceRole.roleArn,
+  private createStackOutputs(secretValue: SecretValue, itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, apiKey: cdk.aws_appsync.CfnApiKey) {
+    
+    new cdk.CfnOutput(this, 'GraphQlApiUrl', {
+      value: itemsGraphQLApi.attrGraphQlUrl,
+      description: 'Graphql invocation url',
+      exportName: 'ServiceBGraphQlApiUrl',
     });
-  }
 
-  private createGraphQlSchema(itemsGraphQLApi: cdk.aws_appsync.CfnGraphQLApi, serviceBName: string) {
-    return new CfnGraphQLSchema(this, "serviceBschema", {
-      apiId: itemsGraphQLApi.attrApiId,
-      definition: `type ${serviceBName} {
-        id: ID!
-        name: String
-      }
-      type Paginated${serviceBName} {
-        items: [${serviceBName}!]!
-        nextToken: String
-      }
-      type Query {
-        all(limit: Int, nextToken: String): Paginated${serviceBName}!
-        getOne(id: ID!): ${serviceBName}
-      }
-      type Schema {
-        query: Query
-      }`,
+    new cdk.CfnOutput(this, 'serviceBGraphQlApiKeyOut', {
+      value: apiKey.attrApiKey,
+      description: 'graphQl api key',
+      exportName: 'serviceBGraphQlApiKey',
     });
   }
 }
