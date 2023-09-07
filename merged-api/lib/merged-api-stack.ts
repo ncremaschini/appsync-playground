@@ -10,34 +10,25 @@ export class MergedApiStack extends cdk.Stack {
     
     const { servicaAApId, servicaBApId } = this.getFederatedApiIds();     
 
-    this.lookupApis(servicaAApId, servicaBApId);
-  }
-
-  private lookupApis(servicaAApId: string, servicaBApId: string) {
-    const serviceAApis = appsync.GraphqlApi.fromGraphqlApiAttributes(this, 'serviceAApis', {
-      graphqlApiId: servicaAApId,
-    });
-
-    const serviceBApis = appsync.GraphqlApi.fromGraphqlApiAttributes(this, 'serviceBApis', {
-      graphqlApiId: servicaBApId,
-    });
-
-    //waiting for support in cdk lib!
-    /* const api = new appsync.CfnGraphQLApi(this, 'MergedApi', {
-      name: 'demo',
-      apiSource: appsync.ApiSource.fromSourceApis({
+    const { serviceAApi, serviceBApi} = this.lookupApis(servicaAApId, servicaBApId);
+    
+    this.createDatasources(serviceAApi, serviceBApi);
+    
+    const api = new appsync.GraphqlApi(this, 'MergedApi', {
+      name: 'merged-api',
+      definition: appsync.Definition.fromSourceApis({
         sourceApis: [
           {
-            sourceApi: firstApi,
-            mergeType: GraphqlApi.MergeType.MANUAL_MERGE,
+            sourceApi: serviceAApi,
+            mergeType: appsync.MergeType.AUTO_MERGE,
           },
           {
-            sourceApi: secondApi,
+            sourceApi: serviceBApi,
             mergeType: appsync.MergeType.AUTO_MERGE,
           },
         ],
       }),
-    }); */
+    }); 
   }
 
   private getFederatedApiIds() {
@@ -47,5 +38,27 @@ export class MergedApiStack extends cdk.Stack {
     const servicaBApId = ssm.StringParameter.valueForStringParameter(
       this, '/serviceB/graphQlApiId');
     return { servicaAApId, servicaBApId };
+  }
+
+  private lookupApis(servicaAApId: string, servicaBApId: string) {
+    const serviceAApi = appsync.GraphqlApi.fromGraphqlApiAttributes(this, 'serviceAApis', {
+      graphqlApiId: servicaAApId,
+    }) as appsync.GraphqlApi;
+
+    const serviceBApi = appsync.GraphqlApi.fromGraphqlApiAttributes(this, 'serviceBApis', {
+      graphqlApiId: servicaBApId,
+    }) as appsync.GraphqlApi;
+
+    return { serviceAApi, serviceBApi};
+  }
+
+  private createDatasources(serviceAApi: appsync.IGraphqlApi, serviceBApi: appsync.IGraphqlApi) {
+    serviceAApi.addNoneDataSource('ServiceADS', {
+      name: cdk.Lazy.string({ produce(): string { return 'ServiceADS'; } }),
+    });
+
+    serviceBApi.addNoneDataSource('ServiceBDS', {
+      name: cdk.Lazy.string({ produce(): string { return 'ServiceBDS'; } }),
+    });
   }
 }
