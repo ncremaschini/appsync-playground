@@ -6,7 +6,7 @@
   },
   "scripts": {
     "postinstall": "(cd lib/lambdas && npm install);",
-    "clean": "tsc --build --clean && jest --updateSnapshot",
+    "clean": "tsc --build --clean && jest --updateSnapshot && rm -rf cdk.out",
     "build": "tsc",
     "watch": "tsc -w",
     "test": "jest",

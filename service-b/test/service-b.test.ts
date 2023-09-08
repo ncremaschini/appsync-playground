@@ -17,7 +17,7 @@ test("All resources created", () => {
     TableName: 'serviceBItems',
     KeySchema: [
         {
-            "AttributeName": "serviceBItemsId",
+            "AttributeName": "id",
             "KeyType": "HASH",
         }],
     SSESpecification: {

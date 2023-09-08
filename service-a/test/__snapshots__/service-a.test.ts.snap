@@ -15,18 +15,6 @@ exports[`All resources created 1`] = `
         ],
       },
     },
-    "serviceAApiKeyOut": {
-      "Description": "api key",
-      "Export": {
-        "Name": "serviceAApiKey",
-      },
-      "Value": {
-        "Fn::GetAtt": [
-          "ApiKey",
-          "ApiKey",
-        ],
-      },
-    },
   },
   "Parameters": {
     "BootstrapVersion": {
@@ -36,48 +24,6 @@ exports[`All resources created 1`] = `
     },
   },
   "Resources": {
-    "ApiCloudWatchRole51F74042": {
-      "Properties": {
-        "AssumeRolePolicyDocument": {
-          "Statement": [
-            {
-              "Action": "sts:AssumeRole",
-              "Effect": "Allow",
-              "Principal": {
-                "Service": "appsync.amazonaws.com",
-              },
-            },
-          ],
-          "Version": "2012-10-17",
-        },
-        "ManagedPolicyArns": [
-          {
-            "Fn::Join": [
-              "",
-              [
-                "arn:",
-                {
-                  "Ref": "AWS::Partition",
-                },
-                ":iam::aws:policy/service-role/AWSAppSyncPushToCloudWatchLogs",
-              ],
-            ],
-          },
-        ],
-      },
-      "Type": "AWS::IAM::Role",
-    },
-    "ApiKey": {
-      "Properties": {
-        "ApiId": {
-          "Fn::GetAtt": [
-            "serviceAApi",
-            "ApiId",
-          ],
-        },
-      },
-      "Type": "AWS::AppSync::ApiKey",
-    },
     "DeleteMutationResolver": {
       "DependsOn": [
         "ServiceAItemsDataSource",
@@ -96,7 +42,7 @@ exports[`All resources created 1`] = `
         "version": "2017-02-28",
         "operation": "DeleteItem",
         "key": {
-          "serviceAItemsId": $util.dynamodb.toDynamoDBJson($ctx.args.serviceAItemsId)
+          "id": $util.dynamodb.toDynamoDBJson($ctx.args.id)
         }
       }",
         "ResponseMappingTemplate": "$util.toJson($ctx.result)",
@@ -147,7 +93,7 @@ exports[`All resources created 1`] = `
         "version": "2017-02-28",
         "operation": "GetItem",
         "key": {
-          "serviceAItemsId": $util.dynamodb.toDynamoDBJson($ctx.args.serviceAItemsId)
+          "id": $util.dynamodb.toDynamoDBJson($ctx.args.id)
         }
       }",
         "ResponseMappingTemplate": "$util.toJson($ctx.result)",
@@ -173,7 +119,7 @@ exports[`All resources created 1`] = `
         "version": "2017-02-28",
         "operation": "PutItem",
         "key": {
-          "serviceAItemsId": { "S": "$util.autoId()" }
+          "id": { "S": "$util.autoId()" }
         },
         "attributeValues": {
           "name": $util.dynamodb.toDynamoDBJson($ctx.args.name)
@@ -183,6 +129,48 @@ exports[`All resources created 1`] = `
         "TypeName": "Mutation",
       },
       "Type": "AWS::AppSync::Resolver",
+    },
+    "ServiceAApiCloudWatchRoleEB379CE3": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "appsync.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":iam::aws:policy/service-role/AWSAppSyncPushToCloudWatchLogs",
+              ],
+            ],
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Role",
+    },
+    "ServiceAApiKey": {
+      "Properties": {
+        "ApiId": {
+          "Fn::GetAtt": [
+            "serviceAApi",
+            "ApiId",
+          ],
+        },
+      },
+      "Type": "AWS::AppSync::ApiKey",
     },
     "ServiceAItemsDataSource": {
       "Properties": {
@@ -248,7 +236,7 @@ exports[`All resources created 1`] = `
         "LogConfig": {
           "CloudWatchLogsRoleArn": {
             "Fn::GetAtt": [
-              "ApiCloudWatchRole51F74042",
+              "ServiceAApiCloudWatchRoleEB379CE3",
               "Arn",
             ],
           },
@@ -258,19 +246,36 @@ exports[`All resources created 1`] = `
       },
       "Type": "AWS::AppSync::GraphQLApi",
     },
+    "serviceAApiIdParam98687952": {
+      "Properties": {
+        "AllowedPattern": ".*",
+        "DataType": "text",
+        "Description": "Service A graphQl Api id",
+        "Name": "/serviceA/graphQlApiId",
+        "Tier": "Standard",
+        "Type": "String",
+        "Value": {
+          "Fn::GetAtt": [
+            "serviceAApi",
+            "ApiId",
+          ],
+        },
+      },
+      "Type": "AWS::SSM::Parameter",
+    },
     "serviceAItems03DA76B3": {
       "DeletionPolicy": "Delete",
       "Properties": {
         "AttributeDefinitions": [
           {
-            "AttributeName": "serviceAItemsId",
+            "AttributeName": "id",
             "AttributeType": "S",
           },
         ],
         "BillingMode": "PAY_PER_REQUEST",
         "KeySchema": [
           {
-            "AttributeName": "serviceAItemsId",
+            "AttributeName": "id",
             "KeyType": "HASH",
           },
         ],
@@ -294,7 +299,7 @@ exports[`All resources created 1`] = `
           ],
         },
         "Definition": "type serviceAItems {
-        serviceAItemsId: ID!
+        id: ID!
         name: String
       }
       type PaginatedserviceAItems {
@@ -303,11 +308,11 @@ exports[`All resources created 1`] = `
       }
       type Query {
         all(limit: Int, nextToken: String): PaginatedserviceAItems!
-        getOne(serviceAItemsId: ID!): serviceAItems
+        getOne(id: ID!): serviceAItems
       }
       type Mutation {
         save(name: String!): serviceAItems
-        delete(serviceAItemsId: ID!): serviceAItems
+        delete(id: ID!): serviceAItems
       }
       type Schema {
         query: Query

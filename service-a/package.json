@@ -6,7 +6,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "clean": "tsc --build --clean && jest --updateSnapshot",
+    "clean": "tsc --build --clean && jest --updateSnapshot && rm -rf cdk.out",
     "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk"
