@@ -8,10 +8,10 @@ export class MergedApiStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
     
-    const { servicaAApId, servicaBApId } = this.getFederatedApiIds();     
-
+    const { servicaAApId, servicaBApId } = this.getFederatedApiIds(); 
+  
     const { serviceAApi, serviceBApi} = this.lookupApis(servicaAApId, servicaBApId);
-    
+  
     this.createDatasources(serviceAApi, serviceBApi);
     
     const api = new appsync.GraphqlApi(this, 'MergedApi', {
@@ -37,6 +37,7 @@ export class MergedApiStack extends cdk.Stack {
 
     const servicaBApId = ssm.StringParameter.valueForStringParameter(
       this, '/serviceB/graphQlApiId');
+      
     return { servicaAApId, servicaBApId };
   }
 

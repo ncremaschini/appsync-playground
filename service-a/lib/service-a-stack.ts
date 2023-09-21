@@ -96,12 +96,12 @@ export class ServiceAStack extends cdk.Stack {
         nextToken: String
       }
       type Query {
-        all(limit: Int, nextToken: String): Paginated${tableName}!
-        getOne(id: ID!): ${tableName}
+        all(limit: Int, nextToken: String): Paginated${tableName}! @renamed(to: "all${tableName}")
+        getOne(id: ID!): ${tableName} @renamed(to: "getOne${tableName}")
       }
       type Mutation {
-        save(name: String!): ${tableName}
-        delete(id: ID!): ${tableName}
+        save(name: String!): ${tableName} @renamed(to: "save${tableName}")
+        delete(id: ID!): ${tableName} @renamed(to: "delete${tableName}")
       }
       type Schema {
         query: Query
