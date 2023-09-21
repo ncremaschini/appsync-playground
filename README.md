@@ -26,3 +26,29 @@ Each service has its own folder, and has to be installed, built and deployed ind
 ## Deploy
 Each service has to be deployed indipendently, starting from serviceA, then serviceB and finally mergedApi.
 
+#Pitfalls
+## ServiceB
+### api gateway's  api key
+Api Gateway has a usage plan with associated api key. this is to emulate an api that could be invoked directly throught api gateway and also through appsync.
+
+in order to let appync to invoke api gateway, the api key has to be passed as header. This is done in appsync resolver's  request mapping template.
+
+### api gateway invocation end poit
+Api gateway has a stage, which is used to deploy the api. The stage is used to build the endpoint to invoke the api. 
+If you use the invocation endpoint as is, with stage included, as http endpoint in appsync, api gateway always returns 403.
+
+You have to set up the api gateway endpoint as http endpoint in appsync without the stage, and then add the stage in the request mapping template in `resourcePath` parameter.
+
+
+## Merged api
+### appsync execution role
+The default provided execution role for federated appsync does not have the permission to invoke federated apis.
+You have to add the permission to invoke the federated apis to the execution role, creating a custom one.
+
+## All services
+be carefull with defaults!
+### log retention
+The default log retention is `never expires`, so you have to set up a log retention policy for each resources. 
+
+
+
