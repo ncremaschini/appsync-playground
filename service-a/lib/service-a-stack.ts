@@ -2,7 +2,7 @@ import cdk = require('aws-cdk-lib');
 
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 
-import { AttributeType, BillingMode, StreamViewType, Table, TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
+import { AttributeType, BillingMode, CfnTable, StreamViewType, Table, TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
 import { CfnApiKey, CfnDataSource, CfnGraphQLApi, CfnGraphQLSchema, CfnResolver, FieldLogLevel, LogConfig } from 'aws-cdk-lib/aws-appsync';
 import { ManagedPolicy, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 
