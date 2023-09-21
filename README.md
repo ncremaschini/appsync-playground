@@ -2,6 +2,7 @@
 Just my playground to play around with appsync and CDK, focusing on federation and merged apis
 
 The system is composed by two services, called `serviceA, serviceB ` exposing their own graphQl Schema.
+Then a third service, called `mergedApi` is exposing a merged graphQl Schema, which is a federation of the two services.
 
 ![Alt text](appsync_federation.png?raw=true "Title")
 
